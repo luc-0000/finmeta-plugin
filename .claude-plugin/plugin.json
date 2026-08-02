@@ -1,0 +1,7 @@
+{
+  "name": "finmeta-plugin",
+  "displayName": "FinMeta Client",
+  "description": "FinMeta client plugin — 4 skills: simulation trading (A-Share / US Stock / Crypto: market data, accounts, orders), market-data (symbols/quotes/kline, read-only), invoke-api-agent (call type=api agents), finmeta-task-agent (call task agents via A2A).",
+  "version": "0.1.0",
+  "author": { "name": "lu" }
+}

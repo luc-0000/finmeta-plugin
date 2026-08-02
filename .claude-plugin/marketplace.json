@@ -1,0 +1,11 @@
+{
+  "name": "finmeta-plugins",
+  "owner": { "name": "lu" },
+  "plugins": [
+    {
+      "name": "finmeta-plugin",
+      "source": "./",
+      "description": "FinMeta client plugin — bundles the finmeta-simulation-skill (A-Share / US Stock / Crypto simulation trading)."
+    }
+  ]
+}
