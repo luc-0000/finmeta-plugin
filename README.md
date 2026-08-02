@@ -4,15 +4,25 @@ A Claude Code **plugin** that bundles FinMeta client skills.
 
 ## Skills
 
-| Skill | What it does | Credits |
-|-------|-------------|---------|
-| `finmeta-plugin` (root) | **Token setup** — SSOT for `FINMETA_ACCESS_TOKEN` | — |
-| `market-data` | Symbols / quotes / kline (A-Share, US Stock, Crypto) | Free |
-| `finmeta-simulation-skill` | Simulation trading — accounts, positions, orders | Free |
-| `invoke-api-agent` | Call API agents (`type=api`) | Per-call |
-| `finmeta-task-agent` | Call Task agents via A2A | Per-call |
+Quick map:
 
-> All 4 functional skills share the same `FINMETA_ACCESS_TOKEN` — managed centrally by the root `finmeta-plugin` setup skill.
+| Skill | Purpose | Credits |
+|-------|---------|---------|
+| `finmeta-plugin` (root) | Token setup — SSOT for `FINMETA_ACCESS_TOKEN` | — |
+| `market-data` | Read-only market data (symbols / quotes / kline) | Free |
+| `finmeta-simulation-skill` | Paper trading (accounts / positions / orders) | Free |
+| `invoke-api-agent` | Call API agents (`type=api`) — sync HTTP | Per-call |
+
+### `market-data` — read-only market data
+Query symbol universe, latest quotes, and candlestick/kline for **A-Share, US Stock, and Crypto**. Read-only, no credits charged. Use it to look up a ticker, get the latest price, or pull chart bars without trading. Endpoints under `/api/v1/public/markets/{market}/...`.
+
+### `finmeta-simulation-skill` — paper trading
+Simulation (paper) trading across **A-Share, US Stock, and Crypto**. Check account balance and positions, view order history, and place buy/sell orders against simulated money. Free — uses `simulation_accounts` balance, not platform credits.
+
+### `invoke-api-agent` — call API agents
+Invoke a marketplace **API agent** (`type=api`, e.g. data / text-factor agents) by a **synchronous HTTP POST** to its `fc_invoke_url`. Charges `call_credits` per call (free for the agent owner). Discover agents via `GET /api/v1/public/agents?type=api_agent`. Typical use: fetch a factor, run a data extraction, get a structured result back in one request.
+
+> All functional skills share the same `FINMETA_ACCESS_TOKEN` — managed centrally by the root `finmeta-plugin` setup skill.
 
 ## Structure
 
