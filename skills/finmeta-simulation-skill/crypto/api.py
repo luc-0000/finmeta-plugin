@@ -16,7 +16,10 @@ import argparse, json, os, sys
 from pathlib import Path
 
 SKILL_DIR = Path(__file__).resolve().parent.parent
-CONFIG_FILE = SKILL_DIR / "config.json"
+CONFIG_FILE = SKILL_DIR / "config.json"  # legacy: token field only
+TOKEN_FILE = Path.home() / ".finmeta" / "access_token"  # SSOT for access token
+ACCOUNTS_FILE = Path.home() / ".finmeta" / "config.json"  # SSOT for account_ids
+MARKET = "crypto"  # this module's key under accounts.*
 API_BASE = os.getenv("FINTOOLS_API_BASE", "https://fin-meta.net")
 API_PREFIX = "/api/v1/crypto"
 
@@ -58,6 +61,8 @@ def _load_token():
     token = os.getenv("FINMETA_ACCESS_TOKEN") or os.getenv("FINTOOLS_API_TOKEN")
     if token:
         return token
+    if TOKEN_FILE.exists():
+        return TOKEN_FILE.read_text().strip()
     return _load_config().get("token", "")
 
 
@@ -68,20 +73,31 @@ def _save_token(token):
 
 
 def _load_account_id():
-    """Read simulation_account_id from env var or config.json."""
+    """Read account_id from env var (override) or ~/.finmeta/config.json (SSOT)."""
     val = os.getenv("FINTOOLS_SIMULATION_ACCOUNT_ID")
     if val:
         try:
             return int(val)
         except ValueError:
             pass
-    return _load_config().get("account_id")
+    if ACCOUNTS_FILE.exists():
+        try:
+            return json.loads(ACCOUNTS_FILE.read_text()).get("accounts", {}).get(MARKET)
+        except json.JSONDecodeError:
+            return None
+    return None
 
 
 def _save_account_id(account_id: int):
-    cfg = _load_config()
-    cfg["account_id"] = account_id
-    _save_config(cfg)
+    ACCOUNTS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    cfg = {}
+    if ACCOUNTS_FILE.exists():
+        try:
+            cfg = json.loads(ACCOUNTS_FILE.read_text())
+        except json.JSONDecodeError:
+            cfg = {}
+    cfg.setdefault("accounts", {})[MARKET] = account_id
+    ACCOUNTS_FILE.write_text(json.dumps(cfg, indent=2))
 
 
 def _require_account_id():

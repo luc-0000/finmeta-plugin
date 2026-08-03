@@ -10,9 +10,8 @@ Covers **A-Share** (`ashare/`), **Crypto** (`crypto/`), and **US Stock** (`ussto
 ## Quick Start
 
 ```bash
-# Token: load from ~/.finmeta/access_token (set up by finmeta-plugin)
-export FINMETA_ACCESS_TOKEN=$(cat ~/.finmeta/access_token 2>/dev/null)
-export FINTOOLS_SIMULATION_ACCOUNT_ID=123   # A-Share only
+# Token: auto-loaded from ~/.finmeta/access_token by api.py (no export needed)
+# A-Share account_id is read from ~/.finmeta/config.json — see Setup to save it
 
 # A-Share
 python ashare/api.py --action get_quote --symbols "600519.SH"
@@ -32,19 +31,17 @@ python usstock/api.py --action buy --symbol AAPL --quantity 10
 
 ## Setup
 
-> **Token**: load from persistent storage first:
-> ```bash
-> export FINMETA_ACCESS_TOKEN=$(cat ~/.finmeta/access_token 2>/dev/null)
-> ```
-> If the file doesn't exist or is empty, stop and ask the user to run `finmeta-plugin` setup skill first.
+> **Token**: auto-loaded from `~/.finmeta/access_token` by `api.py` — no export needed.
+> If the file doesn't exist, stop and ask the user to run `finmeta-plugin` setup skill first.
 
 ```bash
-# A-Share only — save account ID (token is managed by plugin)
+# A-Share only — save account ID to ~/.finmeta/config.json (accounts.ashare)
 python ashare/api.py --account-id 123
 ```
 
 - **Account ID** (A-Share only): My Simulation → click ID chip to copy
 - Crypto and US Stock auto-resolve accounts — no account_id needed
+- Saved account IDs live in `~/.finmeta/config.json` under `accounts.<market>`; every trade reads from there at runtime
 
 ## Tools
 
@@ -98,14 +95,18 @@ python ashare/api.py --account-id 123
 
 ## Agent Notes
 
+> ⚠️ **Account ID source of truth = `~/.finmeta/config.json`** (key `accounts.<market>`).
+> Every trade/account query reads account_id from this file at runtime — `api.py` does it for you; **never** hardcode an id in a command.
+> **NEVER** store account_id in agent memory, and **never** copy a value from conversation history into a call. If the user mentions an account id, persist it first with `python <market>/api.py --account-id <id>`, then let the skill read it back from the file.
+
 ### First Run — Token & Account Setup
 
 1. Token: load from `~/.finmeta/access_token`. If missing, invoke `finmeta-plugin` setup skill.
-2. For A-Share: check `FINTOOLS_SIMULATION_ACCOUNT_ID` env var or `config.json` `account_id`
+2. For A-Share: read account_id from `~/.finmeta/config.json` (`accounts.ashare`).
 3. If A-Share account_id is missing (but token is set):
    - List accounts: `curl -H "Authorization: Bearer $FINMETA_ACCESS_TOKEN" https://fin-meta.net/api/v1/ashare/accounts?lightweight=true`
    - Present the list: *"Here are your accounts: (1) Account #123 — A-Share. Which one?"*
-   - Save with: `python ashare/api.py --account-id <id>`
+   - Save with: `python ashare/api.py --account-id <id>` (writes to `~/.finmeta/config.json`)
 4. Crypto and US Stock do not need account_id — they auto-resolve from your user.
 
 ### Typical Flow

@@ -51,7 +51,9 @@ curl -H "Authorization: Bearer $FINMETA_ACCESS_TOKEN" \
 
 ## Kline (candles)
 
-`period`: A-Share `1d|5m`, US Stock `5Min`, Crypto `1m|5m|15m|1h|4h|1d`. `limit`: 1–500 (default 100).
+`period`: A-Share `5m|1h|1d`, US Stock `5m|1h|1d`, Crypto `1m|5m|1h|1d`. `limit`: 1–500 (default 100).
+
+> **US Stock**: native bar is 5m; `1h` and `1d` are server-aggregated from 5m. Use `period=1d` for daily candles — do NOT pull 5m and aggregate client-side.
 
 ```bash
 # Crypto — BTC 1-hour candles, last 50
@@ -62,9 +64,13 @@ curl -H "Authorization: Bearer $FINMETA_ACCESS_TOKEN" \
 curl -H "Authorization: Bearer $FINMETA_ACCESS_TOKEN" \
   "https://fin-meta.net/api/v1/public/markets/ashare/kline?symbol=600519.SH&period=1d&limit=30"
 
+# US Stock — Apple daily candles, last 5 trading days
+curl -H "Authorization: Bearer $FINMETA_ACCESS_TOKEN" \
+  "https://fin-meta.net/api/v1/public/markets/usstock/kline?symbol=AAPL&period=1d&limit=5"
+
 # US Stock — Apple 5-min candles, last 30
 curl -H "Authorization: Bearer $FINMETA_ACCESS_TOKEN" \
-  "https://fin-meta.net/api/v1/public/markets/usstock/kline?symbol=AAPL&period=5Min&limit=30"
+  "https://fin-meta.net/api/v1/public/markets/usstock/kline?symbol=AAPL&period=5m&limit=30"
 ```
 
 ## Notes
