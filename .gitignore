@@ -1,6 +1,3 @@
 __pycache__/
 *.pyc
 config.json
-
-# WIP: task-agent A2A client skill — not ready to publish yet
-skills/finmeta-task-agent/
