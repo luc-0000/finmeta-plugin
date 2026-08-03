@@ -61,7 +61,14 @@ def _load_token():
     token = os.getenv("FINMETA_ACCESS_TOKEN") or os.getenv("FINTOOLS_API_TOKEN")
     if token:
         return token
-    if TOKEN_FILE.exists():
+    if ACCOUNTS_FILE.exists():  # SSOT: ~/.finmeta/config.json
+        try:
+            t = json.loads(ACCOUNTS_FILE.read_text()).get("access_token")
+            if t:
+                return t
+        except json.JSONDecodeError:
+            pass
+    if TOKEN_FILE.exists():  # legacy fallback: ~/.finmeta/access_token
         return TOKEN_FILE.read_text().strip()
     return _load_config().get("token", "")
 

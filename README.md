@@ -6,7 +6,7 @@ A Claude Code **plugin** that bundles FinMeta client skills.
 
 | Skill | Purpose | Credits |
 |-------|---------|---------|
-| `finmeta-plugin` (root) | Token setup — SSOT for `FINMETA_ACCESS_TOKEN` | — |
+| `finmeta-plugin` (root) | Credentials setup — SSOT `~/.finmeta/config.json` (token + account_id) | — |
 | `market-data` | Read-only market data: symbols / quotes / kline (A-Share, US Stock, Crypto) | Free |
 | `finmeta-simulation-skill` | Simulation trading: accounts / positions / orders (A-Share, US Stock, Crypto) | Free |
 | `invoke-api-agent` | Call API agents (`type=api`) via synchronous HTTP POST | Per-call |
@@ -17,7 +17,7 @@ What each skill lets you do:
 - **finmeta-simulation-skill** — Check account balance and positions, view order history, place buy/sell orders with simulated money across all three markets. Free.
 - **invoke-api-agent** — Call a marketplace API agent (e.g. data / factor agent) and get a structured result back in one request. Charges credits per call.
 
-All skills share one `FINMETA_ACCESS_TOKEN`, set up by the root skill.
+All skills read credentials from `~/.finmeta/config.json` (token + account_id), set up by the root skill — no `export` needed.
 
 ## Install
 

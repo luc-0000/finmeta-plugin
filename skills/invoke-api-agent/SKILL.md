@@ -7,11 +7,11 @@ description: Invoke a published FinMeta API Agent (type=api) via its fc_invoke_u
 
 Call a FinMeta **API Agent** (any agent with a non-null `fc_invoke_url`) published to the marketplace. Synchronous HTTP POST. **Charges `call_credits` per call** after `free_call_quota`; the owner calls free.
 
-> **Token**: load from persistent storage first:
+> **Token**: load the `access_token` field from `~/.finmeta/config.json`:
 > ```bash
-> export FINMETA_ACCESS_TOKEN=$(cat ~/.finmeta/access_token 2>/dev/null)
+> export FINMETA_ACCESS_TOKEN=$(python3 -c "import json,os;print(json.load(open(os.path.expanduser('~/.finmeta/config.json'))).get('access_token',''))")
 > ```
-> If the file doesn't exist or is empty, stop and ask the user to run `finmeta-plugin` setup skill first.
+> If the file or field is missing, stop and ask the user to run `finmeta-plugin` setup skill first.
 
 ## Step 1: List API agents
 

@@ -1,69 +1,64 @@
 ---
 name: finmeta-plugin
-description: Set up FinMeta API credentials (FINMETA_ACCESS_TOKEN). Use when any FinMeta skill needs a token, the user asks about authentication, or a 401 error occurs. This is the single source of truth for FinMeta token management — all other finmeta-plugin skills depend on it.
+description: Set up FinMeta API credentials (FINMETA_ACCESS_TOKEN + simulation account_id) in ~/.finmeta/config.json. Use when any FinMeta skill needs credentials, the user asks about authentication, or a 401 error occurs. Single source of truth — all other finmeta-plugin skills depend on it.
 ---
 
-# FinMeta Plugin — Token Setup
+# FinMeta Plugin — Credentials Setup
 
-Single source of truth for `FINMETA_ACCESS_TOKEN`. Every skill in this plugin uses the same token.
+Single source of truth for FinMeta credentials. Every skill in this plugin reads from **`~/.finmeta/config.json`** at runtime — no `export`, no agent memory.
 
-## How token storage works
+## How credential storage works
 
-The token is persisted to **`~/.finmeta/access_token`** (a single-line file, `chmod 600`). All plugin skills source it the same way:
+All credentials persist to **`~/.finmeta/config.json`** (`chmod 600`):
 
-```bash
-export FINMETA_ACCESS_TOKEN=$(cat ~/.finmeta/access_token 2>/dev/null)
+```json
+{
+  "access_token": "<user PAT>",
+  "accounts": { "ashare": 26, "usstock": null, "crypto": null }
+}
 ```
 
-If the file doesn't exist or is empty, the skill stops and asks the user to run this setup first.
+- `access_token` — user PAT, sent as `Authorization: Bearer` for all FinMeta API calls
+- `accounts.<market>` — simulation account_id per market (A-Share needs it; US Stock / Crypto auto-resolve)
+
+Skills read this file directly at runtime: simulation `api.py` reads via Python; `invoke-api-agent` extracts via `python3 -c json`. **Never store credentials in agent memory** — always this file, always re-read it.
+
+If the file or `access_token` field is missing, the skill stops and asks the user to run this setup first.
 
 ## Setup (first time or after token expiry)
 
 ### Step 1: Get your token
 
-1. Open **https://fin-meta.net/profile**
+1. Open **https://fin-meta.net/profile** (cloud) or `http://localhost/profile` (local dev)
 2. Click **"Access Token"** tab
 3. Copy the token
 
-### Step 2: Save the token (persistent)
+### Step 2: Save the token to config.json
 
 ```bash
 mkdir -p ~/.finmeta
-echo "<paste-token-here>" > ~/.finmeta/access_token
-chmod 600 ~/.finmeta/access_token
-```
-
-Then load it into the current session:
-
-```bash
-export FINMETA_ACCESS_TOKEN=$(cat ~/.finmeta/access_token)
+python3 -c "import json,os; p=os.path.expanduser('~/.finmeta/config.json'); cfg=json.load(open(p)) if os.path.exists(p) else {}; cfg['access_token']='<paste-token-here>'; json.dump(cfg,open(p,'w'),indent=2)"
+chmod 600 ~/.finmeta/config.json
 ```
 
 ### Step 3: Verify
 
 ```bash
+TOKEN=$(python3 -c "import json,os;print(json.load(open(os.path.expanduser('~/.finmeta/config.json'))).get('access_token',''))")
 curl -s -o /dev/null -w "%{http_code}" \
-  -H "Authorization: Bearer $FINMETA_ACCESS_TOKEN" \
+  -H "Authorization: Bearer $TOKEN" \
   "https://fin-meta.net/api/v1/public/markets/ashare/symbols?limit=1"
 # Should return 200
 ```
 
 If you get **401**, the token is expired — get a new one from Profile and repeat Step 2.
 
-### Step 4 (optional): Auto-load on shell start
-
-Add to `~/.zshrc` or `~/.bashrc`:
-
-```bash
-export FINMETA_ACCESS_TOKEN=$(cat ~/.finmeta/access_token 2>/dev/null)
-```
-
 ## For simulation trading: A-Share account ID
 
-Only needed for `finmeta-simulation-skill` (A-Share market):
+Only `finmeta-simulation-skill` A-Share market needs an account_id (US Stock / Crypto auto-resolve). Save it to the same config.json:
 
 ```bash
-export FINTOOLS_SIMULATION_ACCOUNT_ID=123
+python ashare/api.py --account-id 26   # writes accounts.ashare in ~/.finmeta/config.json
 ```
 
 Find your account ID: My Simulation page → click the ID chip to copy.
