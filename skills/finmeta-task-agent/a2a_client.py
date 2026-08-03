@@ -147,6 +147,20 @@ def wait_for_run(agent_id, run_id, timeout=900, interval=30):
     return None  # timeout — NOT a failure, agent may still be running
 
 
+def default_run_dir(agent_id, run):
+    """~/.finmeta/runs/agent-<id>_<YYYYMMDD-HHMMSS>/ — timestamp from the run's created_at."""
+    ts = ""
+    created = run.get("created_at") or ""
+    if created:
+        try:
+            from datetime import datetime
+            ts = datetime.fromisoformat(created).strftime("%Y%m%d-%H%M%S")
+        except (ValueError, TypeError):
+            ts = ""
+    folder = f"agent-{agent_id}" + (f"_{ts}" if ts else "")
+    return Path.home() / ".finmeta" / "runs" / folder
+
+
 def download_and_extract(report_url, run_id, out_dir):
     """Download report.zip via curl and extract. Returns (action, extract_dir)."""
     out_dir = Path(out_dir)
@@ -178,8 +192,8 @@ def main():
     p.add_argument("--wait", action="store_true",
                    help="poll until the run finishes, then download + extract report.zip and print the decision")
     p.add_argument("--timeout", type=int, default=900, help="poll timeout seconds (default 900 = 15 min)")
-    p.add_argument("--out-dir", metavar="DIR", default=".",
-                   help="where to save/extract report.zip (default: current dir)")
+    p.add_argument("--out-dir", metavar="DIR", default=None,
+                   help="where to extract report.zip (default: ~/.finmeta/runs/agent-<id>_<time>/)")
     opts = p.parse_args()
 
     if opts.list:
@@ -230,8 +244,9 @@ def main():
     if not report_url:
         print(f"result : {r.get('result')}  (no report_url to download)")
         sys.exit(0)
-    print(f"  downloading + extracting report.zip...", file=sys.stderr)
-    action, reports_dir = download_and_extract(report_url, run_id, opts.out_dir)
+    out_dir = opts.out_dir or default_run_dir(opts.agent, r)
+    print(f"  downloading + extracting report.zip → {out_dir}", file=sys.stderr)
+    action, reports_dir = download_and_extract(report_url, run_id, out_dir)
     print(f"result : {action or r.get('result')}")
     print(f"report : {reports_dir}")
     print(f"         (output.json = decision, run.log = full log, <date>/ = full analysis)")

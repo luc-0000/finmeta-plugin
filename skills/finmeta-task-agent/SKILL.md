@@ -33,7 +33,7 @@ The `--args` keys **must match the agent's `input_schema`** (shown by `--list`).
 3. The agent runs (multi-round debate / research) for 1–10 min, writes its result, and calls back the backend.
 4. Poll `GET /api/v1/agents/{id}/runs?limit=1` until `status=completed`. The decision (`buy`/`sell`/`hold`) is in `result` and in `artifacts.report_url` (a `report.zip` containing `reports/output.json`, `reports/run.log`, and a full analysis JSON).
 
-`--wait` does steps 1+4 for you: polls every 30s up to 15 min (`--timeout`), then **downloads + extracts `report.zip`** and prints the decision from `reports/output.json`. Use `--out-dir` to choose the extract location (default: current dir).
+`--wait` does steps 1+4 for you: polls every 30s up to 15 min (`--timeout`), then **downloads + extracts `report.zip`** and prints the decision from `reports/output.json`. Report extracts to `~/.finmeta/runs/agent-<id>_<YYYYMMDD-HHMMSS>/` by default (use `--out-dir` to override).
 
 > **Timeout ≠ failure.** Some agents run >10 min. If `--wait` times out (exit 124), the agent may still be running — the client prints the `run_id` + a `curl` command to re-check later. It never silently mistakes timeout for failure.
 
