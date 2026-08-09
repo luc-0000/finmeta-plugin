@@ -9,7 +9,8 @@ result. This client submits the call and (with --wait) polls the backend
 the decision.
 
 Usage:
-  python a2a_client.py --list                                              # list task agents + input schemas
+  python a2a_client.py --list                                              # list task agents + input schemas + eval summary
+  python a2a_client.py --detail 1                                          # agent detail + stability / eval test results
   python a2a_client.py --agent 1 --args '{"stock_code":"600519.SH"}'       # submit, return run_id
   python a2a_client.py --agent 1 --args '{"stock_code":"600519.SH"}' --wait # submit + poll + download report
 
@@ -99,13 +100,106 @@ def list_task_agents():
             print(f"      args: {{{', '.join(fields)}}}")
         if a.get("description"):
             print(f"      {a['description'].splitlines()[0][:110]}")
+        # Show latest eval result if available
+        tr = a.get("test_results")
+        if tr and tr.get("eval_tests"):
+            et = tr["eval_tests"][0]  # latest
+            ttype = et.get("test_type") or "?"
+            status = et.get("status") or "?"
+            summary = et.get("summary") or ""
+            ts = et.get("created_at") or ""
+            print(f"      eval: {ttype}={status}  @ {ts}")
+            if summary:
+                print(f"        {summary[:130]}")
     print()
 
     if api_agents:
         print("=== API Agents (sync HTTP — use invoke-api-agent, not this) ===")
         for a in api_agents:
             print(f"  [{a['id']}] {a['name']}  owner={a.get('owner')}")
+            tr = a.get("test_results")
+            if tr and tr.get("eval_tests"):
+                et = tr["eval_tests"][0]
+                ttype = et.get("test_type") or "?"
+                status = et.get("status") or "?"
+                ts = et.get("created_at") or ""
+                summary = et.get("summary") or ""
+                print(f"      eval: {ttype}={status}  @ {ts}")
+                if summary:
+                    print(f"        {summary[:130]}")
+    print()
     return task_agents
+
+
+def show_agent_detail(agent_id):
+    """Fetch and display agent detail with eval / stability test results."""
+    data = api_request("GET", f"/public/agents/{agent_id}")
+    if not data or "id" not in data:
+        sys.exit(f"ERROR: agent {agent_id} not found or not listed.")
+    print(f"=== Agent Detail ===")
+    print(f"  id           : {data['id']}")
+    print(f"  name         : {data.get('name')}")
+    print(f"  author       : {data.get('author')}")
+    print(f"  owner        : {data.get('owner')}")
+    print(f"  type         : {data.get('asset_type')}")
+    print(f"  category     : {data.get('agent_category')}")
+    print(f"  market       : {data.get('asset_market')}")
+    print(f"  instrument   : {data.get('asset_instrument')}")
+    desc = data.get("description") or ""
+    if desc:
+        print(f"  description  : {desc.splitlines()[0][:120]}")
+    print(f"  status       : {data.get('market_status')}")
+    labels = data.get("labels_system", [])
+    if labels:
+        print(f"  labels       : {', '.join(labels)}")
+
+    tr = data.get("test_results")
+    if not tr:
+        print("\n  (no test results)")
+        return
+
+    # Skill tests
+    skill_tests = tr.get("skill_tests", [])
+    if skill_tests:
+        print(f"\n--- Skill Tests ({len(skill_tests)} bound skill(s)) ---")
+        for st in skill_tests:
+            verdict = st.get("verdict") or "?"
+            name = st.get("test_repo_name") or f"skill#{st.get('test_repo_id')}"
+            ts = st.get("created_at") or ""
+            print(f"  {name}: {verdict.upper()}  @ {ts}")
+            analysis = st.get("analysis_text") or ""
+            if analysis:
+                print(f"    {analysis[:150]}")
+
+    # Eval tests (stability / performance / ...)
+    eval_tests = tr.get("eval_tests", [])
+    if eval_tests:
+        print(f"\n--- Eval Tests ({len(eval_tests)} run(s)) ---")
+        for et in eval_tests:
+            ttype = et.get("test_type") or "?"
+            status = et.get("status") or "?"
+            summary = et.get("summary") or ""
+            ts = et.get("created_at") or ""
+            payload = et.get("result_payload") or {}
+            # Extract key metrics from result_payload if present
+            metrics = ""
+            if isinstance(payload, dict):
+                runs = payload.get("runs") or payload.get("total_runs") or payload.get("iterations") or ""
+                avg = payload.get("avg_pass_rate") or payload.get("pass_rate") or payload.get("accuracy") or ""
+                if runs:
+                    metrics += f"runs={runs}"
+                if avg:
+                    metrics += f", avg={avg}" if metrics else f"avg={avg}"
+            print(f"  {ttype}: {status}  @ {ts}")
+            if metrics:
+                print(f"    {metrics}")
+            if summary:
+                print(f"    {summary[:200]}")
+            if isinstance(payload, dict) and not metrics:
+                # Fallback: show top-level keys
+                keys = [k for k in payload.keys() if not k.startswith("_")]
+                if keys:
+                    print(f"    payload keys: {', '.join(keys[:8])}")
 
 
 def build_a2a_body(agent_args):
@@ -186,6 +280,7 @@ def download_and_extract(report_url, run_id, out_dir):
 def main():
     p = argparse.ArgumentParser(description="FinMeta Task Agent A2A client (minimal)")
     p.add_argument("--list", action="store_true")
+    p.add_argument("--detail", metavar="ID", type=int, help="show agent detail (including eval / stability test results)")
     p.add_argument("--agent", metavar="ID", help="task agent id")
     p.add_argument("--args", metavar="JSON", default="{}",
                    help='agent args JSON, e.g. \'{"stock_code":"600519.SH"}\'')
@@ -198,6 +293,9 @@ def main():
 
     if opts.list:
         list_task_agents()
+        return
+    if opts.detail:
+        show_agent_detail(opts.detail)
         return
     if not opts.agent:
         p.print_help()

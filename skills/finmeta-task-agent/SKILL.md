@@ -37,6 +37,32 @@ The `--args` keys **must match the agent's `input_schema`** (shown by `--list`).
 
 > **Timeout ≠ failure.** Some agents run >10 min. If `--wait` times out (exit 124), the agent may still be running — the client prints the `run_id` + a `curl` command to re-check later. It never silently mistakes timeout for failure.
 
+## Querying Agent Performance / Eval Results
+
+When asked about an agent's **stability**, **performance**, **eval test results**, or "how reliable is this agent":
+
+```bash
+# Quick lookup — latest eval + skill test results from public API
+python a2a_client.py --detail <agent_id>
+```
+
+This calls `GET /api/v1/public/agents/{id}` and displays:
+- Basic agent info (name, type, category, market)
+- **Skill Tests** — each bound skill's latest PASS/FAIL verdict
+- **Eval Tests** — latest stability / performance run: test_type, status, key metrics, summary, timestamp
+
+If the user asks "how stable is agent X?":
+1. Run `python a2a_client.py --list` to find the agent's ID (or use `--detail <id>` directly if known)
+2. Run `python a2a_client.py --detail <id>` to see all eval and skill test results
+3. Answer based on the eval test's `status`, `summary`, and metrics
+
+**For full eval history** (authenticated, paginated):
+```bash
+curl -s "https://fin-meta.net/api/v1/agents/{agent_id}/eval/results?page=1&page_size=20" \
+  -H "Authorization: Bearer $FINMETA_ACCESS_TOKEN"
+```
+Returns all eval runs with detailed `artifacts` (result_payload) metrics. This endpoint requires user auth (PAT).
+
 ## Manual call (curl)
 
 ```bash
