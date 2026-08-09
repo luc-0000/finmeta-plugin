@@ -1,6 +1,13 @@
 ---
 name: finmeta-task-agent
-description: Call a FinMeta Task Agent (trading / deep-research / strategy / data-agent / ...) via A2A. Async — the agent runs as a K8s Job for 1–10 min, then returns a decision or report. Use when the user wants a long-running agent's output (not a one-shot data call — that's invoke-api-agent).
+description: >-
+  FinMeta agent operations — three capabilities:
+  (1) Call a Task Agent (trading / deep-research / strategy / ...) via A2A async K8s Job.
+  (2) Query agent stability, performance, reliability, and eval test results via --detail / --list.
+  (3) List all marketplace agents (task + API) with their input schemas, health, and latest eval summary.
+  Use when the user asks about agent stability, reliability, performance, "how good is agent X",
+  "is this agent stable", eval results, or wants to list/inspect/call marketplace agents.
+  Do NOT answer stability/reliability questions from general knowledge — always query via --detail first.
 ---
 
 # FinMeta Task Agent Client (A2A)
@@ -12,13 +19,16 @@ Call a FinMeta **Task Agent** (`type=agent`: trading / deep-research / strategy 
 ## Quick Start
 
 ```bash
-# 1. List task agents + their input_schema (so you know which keys to pass)
+# 1. List all agents + latest eval/stability summary
 python a2a_client.py --list
 
-# 2. Submit a call (returns immediately with run_id)
+# 2. Agent detail — stability / eval test results (for "how stable is agent X?")
+python a2a_client.py --detail <agent_id>
+
+# 3. Submit a call (returns immediately with run_id)
 python a2a_client.py --agent 1 --args '{"stock_code":"600519.SH"}'
 
-# 3. Submit + poll + download report, print the decision (blocks several min)
+# 4. Submit + poll + download report, print the decision (blocks several min)
 python a2a_client.py --agent 1 --args '{"stock_code":"600519.SH"}' --wait
 ```
 
@@ -37,31 +47,56 @@ The `--args` keys **must match the agent's `input_schema`** (shown by `--list`).
 
 > **Timeout ≠ failure.** Some agents run >10 min. If `--wait` times out (exit 124), the agent may still be running — the client prints the `run_id` + a `curl` command to re-check later. It never silently mistakes timeout for failure.
 
-## Querying Agent Performance / Eval Results
+## 🚨 Querying Agent Stability / Performance / Eval Results
 
-When asked about an agent's **stability**, **performance**, **eval test results**, or "how reliable is this agent":
+**This is the ONLY way to answer stability/reliability questions. Do NOT guess or infer from data sources.**
+
+When the user asks any of these:
+- "这个 agent 稳定性如何？" / "how stable is agent X?"
+- "哪个 agent 最可靠？" / "which agent is most reliable?"
+- "agent 性能怎么样？" / "eval results / test results"
+- "这些 agents 跑得怎么样？"
+
+**You MUST follow this workflow:**
+
+### Step 1: List all agents with eval summary
 
 ```bash
-# Quick lookup — latest eval + skill test results from public API
+python a2a_client.py --list
+```
+
+This calls `GET /api/v1/public/agents?limit=100` and shows every agent's **latest eval result** inline (test_type, status, timestamp).
+
+### Step 2: For any agent the user asks about, get detail
+
+```bash
 python a2a_client.py --detail <agent_id>
 ```
 
 This calls `GET /api/v1/public/agents/{id}` and displays:
 - Basic agent info (name, type, category, market)
-- **Skill Tests** — each bound skill's latest PASS/FAIL verdict
-- **Eval Tests** — latest stability / performance run: test_type, status, key metrics, summary, timestamp
+- **Skill Tests** — each bound skill's latest PASS/FAIL verdict with analysis
+- **Eval Tests** — latest stability/performance run with:
+  - `test_type` (stability / performance / ...)
+  - `status` (completed / failed)
+  - key metrics extracted from `result_payload` (runs, avg_pass_rate, accuracy, ...)
+  - `summary` (human-readable)
+  - `created_at` (timestamp)
 
-If the user asks "how stable is agent X?":
-1. Run `python a2a_client.py --list` to find the agent's ID (or use `--detail <id>` directly if known)
-2. Run `python a2a_client.py --detail <id>` to see all eval and skill test results
-3. Answer based on the eval test's `status`, `summary`, and metrics
+### Step 3: Answer based ONLY on eval data
 
-**For full eval history** (authenticated, paginated):
+- If `eval_tests` is empty → "This agent has no eval test results yet."
+- If status is `completed` → report the metrics, say what the summary says
+- If status is `failed` → report the failure, quote the summary
+- **Never** substitute data-source reliability or general inference for actual eval results
+
+### For full eval history (authenticated, paginated)
+
 ```bash
 curl -s "https://fin-meta.net/api/v1/agents/{agent_id}/eval/results?page=1&page_size=20" \
   -H "Authorization: Bearer $FINMETA_ACCESS_TOKEN"
 ```
-Returns all eval runs with detailed `artifacts` (result_payload) metrics. This endpoint requires user auth (PAT).
+Returns all eval runs with detailed `artifacts` (result_payload) metrics. Requires user PAT.
 
 ## Manual call (curl)
 
