@@ -189,29 +189,65 @@ def get_kline(symbol: str, limit: int = 100):
 
 # === Account (requires account_id) ===
 
+def _clear_account_id():
+    """Remove this market's account_id from config (stale residue from another token's user)."""
+    if not ACCOUNTS_FILE.exists():
+        return
+    try:
+        cfg = json.loads(ACCOUNTS_FILE.read_text())
+    except json.JSONDecodeError:
+        return
+    if MARKET in cfg.get("accounts", {}):
+        del cfg["accounts"][MARKET]
+        ACCOUNTS_FILE.write_text(json.dumps(cfg, indent=2))
+
+
 def _pick_account_id():
-    """Resolve account_id: env/config override → personal account from GET /simulation/accounts."""
+    """Resolve account_id: env/config (ownership-validated) → personal account from GET /simulation/accounts.
+
+    config 存的 id 不在当前 token 名下 = 旧 token 残留：从 config 清除并改用名下盘，
+    换 token 后首次调用即自愈（不再 404 死锁）。列表接口失败时不拦已配置的 id。
+    """
     aid = _require_account_id()
-    if aid:
-        return aid
     resp = _get("/accounts", {"market": MARKET}, sim=True)
     if not resp.get("success"):
-        return None
+        return aid
     accounts = resp.get("data", {}).get("data", {}).get("accounts", [])
+    owned = {a.get("id") for a in accounts}
+    if aid and aid in owned:
+        return aid
+    if aid:
+        _clear_account_id()
+        print(f"stale account id {aid} (accounts.{MARKET}) cleared — not owned by current token",
+              file=sys.stderr)
     personal = next((a for a in accounts if a.get("competition_id") is None), None)
     acc = personal or (accounts[0] if accounts else None)
     return acc.get("id") if acc else None
 
 
 def _ensure_account_id():
-    """下单用：env/config → 名下盘 → 都没有则新建一个（对齐旧自动建盘行为）。"""
+    """下单用：env/config → 名下盘 → 都没有则新建一个并写回 config（对齐旧自动建盘行为）。"""
     aid = _pick_account_id()
     if aid:
         return aid
     resp = _post("/accounts", {"market": MARKET})
     if resp.get("success"):
-        return resp["data"]["data"]["id"]
+        new_id = resp["data"]["data"]["id"]
+        _save_account_id(new_id)
+        return new_id
     return None
+
+
+def _no_account_error(trade: bool = False):
+    """名下无盘（或建盘失败）时的报错 — 提示用户传入最新模拟盘号。"""
+    hint = ("provide the latest simulation account_id: pass account_id / set "
+            f"FINTOOLS_SIMULATION_ACCOUNT_ID / python {MARKET}/api.py --account-id <id>")
+    if trade:
+        return {"success": False,
+                "error": f"No {MARKET} account and auto-create failed — {hint}"}
+    return {"success": False,
+            "error": f"No {MARKET} accounts found under this token — {hint}, "
+                     f"or place a trade first (a new account will be created)"}
 
 
 def get_account(account_id: int = None):
@@ -222,7 +258,7 @@ def get_account(account_id: int = None):
             without it returns all your accounts with aggregate stats.
     """
     _require_token()
-    aid = account_id if account_id is not None else _require_account_id()
+    aid = account_id if account_id is not None else _pick_account_id()
     if aid:
         return _get(f"/accounts/{aid}", sim=True)
     return _get("/accounts", {"market": MARKET}, sim=True)
@@ -242,7 +278,7 @@ def buy(symbol: str, quantity: float, account_id: int = None):
     _require_token()
     aid = account_id if account_id is not None else _ensure_account_id()
     if not aid:
-        return {"success": False, "error": "No accounts available and auto-create failed"}
+        return _no_account_error(trade=True)
     return _post(f"/{MARKET}/accounts/{aid}/orders/buy",
                  {"stock_code": symbol, "quantity": quantity})
 
@@ -259,7 +295,7 @@ def sell(symbol: str, quantity: float, account_id: int = None):
     _require_token()
     aid = account_id if account_id is not None else _ensure_account_id()
     if not aid:
-        return {"success": False, "error": "No accounts available and auto-create failed"}
+        return _no_account_error(trade=True)
     return _post(f"/{MARKET}/accounts/{aid}/orders/sell",
                  {"stock_code": symbol, "quantity": quantity})
 
@@ -282,7 +318,7 @@ def get_positions(account_id: int = None):
     _require_token()
     aid = account_id if account_id is not None else _pick_account_id()
     if not aid:
-        return {"success": False, "error": "No accounts found — place a trade first (auto-creates one)"}
+        return _no_account_error()
     return _get(f"/accounts/{aid}/positions", sim=True)
 
 
@@ -296,7 +332,7 @@ def get_orders(limit: int = 20, account_id: int = None):
     _require_token()
     aid = account_id if account_id is not None else _pick_account_id()
     if not aid:
-        return {"success": False, "error": "No accounts found — place a trade first (auto-creates one)"}
+        return _no_account_error()
     return _get(f"/accounts/{aid}/orders", {"limit": min(limit, 200)}, sim=True)
 
 
@@ -311,7 +347,7 @@ def get_balance_log(page: int = 1, limit: int = 50, account_id: int = None):
     _require_token()
     aid = account_id if account_id is not None else _pick_account_id()
     if not aid:
-        return {"success": False, "error": "No accounts found — place a trade first (auto-creates one)"}
+        return _no_account_error()
     return _get(f"/accounts/{aid}/balance-log", {"page": page, "limit": min(limit, 200)}, sim=True)
 
 

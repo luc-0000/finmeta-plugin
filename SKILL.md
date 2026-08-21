@@ -14,12 +14,15 @@ All credentials persist to **`~/.finmeta/config.json`** (`chmod 600`):
 ```json
 {
   "access_token": "<user PAT>",
-  "accounts": { "ashare": 26, "usstock": null, "crypto": null }
+  "accounts": { "ashare": 3376 }
 }
 ```
 
 - `access_token` — user PAT, sent as `Authorization: Bearer` for all FinMeta API calls
-- `accounts.<market>` — simulation account_id per market (A-Share needs it; US Stock / Crypto auto-resolve)
+- `accounts.<market>` — simulation account_id per market, **all optional**: every market
+  auto-resolves your personal account (and auto-creates one when placing a trade with none).
+  A stored id is ownership-checked on each call — if it belongs to another token's user
+  (leftover after switching tokens), it is cleared automatically and your own account is used.
 
 Skills read this file directly at runtime: simulation `api.py` reads via Python; `invoke-api-agent` extracts via `python3 -c json`. **Never store credentials in agent memory** — always this file, always re-read it.
 
@@ -53,15 +56,19 @@ curl -s -o /dev/null -w "%{http_code}" \
 
 If you get **401**, the token is expired — get a new one from Profile and repeat Step 2.
 
-## For simulation trading: A-Share account ID
+## For simulation trading: account IDs (optional)
 
-Only `finmeta-simulation-skill` A-Share market needs an account_id (US Stock / Crypto auto-resolve). Save it to the same config.json:
+All four markets (A-Share / US Stock / HK Stock / Crypto) auto-resolve your personal
+account — no account_id needed. Saving one is only a pin/shortcut:
 
 ```bash
-python ashare/api.py --account-id 26   # writes accounts.ashare in ~/.finmeta/config.json
+python ashare/api.py --account-id 3376   # writes accounts.ashare in ~/.finmeta/config.json
 ```
 
 Find your account ID: My Simulation page → click the ID chip to copy.
+
+Stored ids are ownership-validated per call; a stale one (from an old token) is cleared
+automatically — switching tokens does not break any market.
 
 ## Token naming convention
 

@@ -11,7 +11,7 @@ Covers **A-Share** (`ashare/`), **Crypto** (`crypto/`), **US Stock** (`usstock/`
 
 ```bash
 # Token: auto-loaded from ~/.finmeta/config.json by api.py (no export needed)
-# A-Share account_id is read from ~/.finmeta/config.json — see Setup to save it
+# account_id optional in all four markets — auto-resolved (see Setup)
 
 # A-Share
 python ashare/api.py --action get_quote --symbols "600519.SH"
@@ -40,13 +40,16 @@ python hkstock/api.py --action buy --symbol 00700.HK --quantity 10
 > If the file doesn't exist, stop and ask the user to run `finmeta-plugin` setup skill first.
 
 ```bash
-# A-Share only — save account ID to ~/.finmeta/config.json (accounts.ashare)
+# Optional — pin a specific account (writes accounts.<market> to ~/.finmeta/config.json)
 python ashare/api.py --account-id 123
 ```
 
-- **Account ID** (A-Share only): My Simulation → click ID chip to copy
-- Crypto, US Stock, and HK Stock auto-resolve accounts — no account_id needed
-- Saved account IDs live in `~/.finmeta/config.json` under `accounts.<market>`; every trade reads from there at runtime
+- All four markets **auto-resolve** your personal account — no account_id needed
+- Placing a trade with no account under this token **auto-creates** one and saves it to config
+- A saved account_id is **ownership-checked** per call: if it belongs to another token's user
+  (leftover after switching tokens), it is cleared automatically and your own account is used —
+  switching tokens never deadlocks a market
+- Find an ID: My Simulation → click ID chip to copy
 
 ## Tools
 
@@ -124,12 +127,10 @@ python ashare/api.py --account-id 123
 ### First Run — Token & Account Setup
 
 1. Token: load from `~/.finmeta/config.json` (`access_token`). If missing, invoke `finmeta-plugin` setup skill.
-2. For A-Share: read account_id from `~/.finmeta/config.json` (`accounts.ashare`).
-3. If A-Share account_id is missing (but token is set):
-   - List accounts: `curl -H "Authorization: Bearer $FINMETA_ACCESS_TOKEN" https://fin-meta.net/api/v1/simulation/accounts?lightweight=true&market=ashare`
-   - Present the list: *"Here are your accounts: (1) Account #123 — A-Share. Which one?"*
-   - Save with: `python ashare/api.py --account-id <id>` (writes to `~/.finmeta/config.json`)
-4. Crypto and US Stock do not need account_id — they auto-resolve from your user.
+2. account_id: nothing to do — every market auto-resolves your personal account
+   (ownership-checks any id saved in config, auto-creates an account when you trade with none).
+3. If a call reports no account under this token and the user names one, persist it first:
+   `python <market>/api.py --account-id <id>` (writes to `~/.finmeta/config.json`).
 
 ### Typical Flow
 
@@ -153,15 +154,15 @@ from finmeta_simulation_skill.crypto import buy as crypto_buy, get_account as cr
 from finmeta_simulation_skill.usstock import buy as usstock_buy, get_account as usstock_account
 from finmeta_simulation_skill.hkstock import buy as hkstock_buy, get_account as hkstock_account
 
-# A-Share — account_id optional (reads from env var / config.json)
-result = ashare_buy("600519.SH", 100, account_id=123)
+# A-Share — account_id optional (auto-resolves / auto-creates)
+result = ashare_buy("600519.SH", 100)
 
-# Crypto — no account_id needed
+# Crypto
 result = crypto_buy("BTC/USDT", 0.01)
 
-# US Stock — account_id optional (auto-creates personal account)
+# US Stock
 result = usstock_buy("AAPL", 10)
 
-# HK Stock — no account_id needed (auto-creates personal account)
+# HK Stock
 result = hkstock_buy("00700.HK", 10)
 ```

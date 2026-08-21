@@ -11,7 +11,10 @@ Base: `https://fin-meta.net/api/v1/ashare`
 | kline | GET | /stocks/{code}/kline?period=1d&limit=60 |
 | rules | GET | /rules |
 
-## Account (Bearer Token + Account ID required)
+## Account (Bearer Token required)
+
+account_id is auto-resolved (config id ownership-checked → personal account →
+auto-create on trade). Pass one explicitly only to override.
 
 | Action | HTTP | Path |
 |--------|------|------|
@@ -19,14 +22,14 @@ Base: `https://fin-meta.net/api/v1/ashare`
 | positions | GET | /accounts/{account_id}/positions |
 | list_my_accounts | GET | /accounts?lightweight=true |
 
-## Trading (Bearer Token + Account ID required)
+## Trading (Bearer Token required)
 
 | Action | HTTP | Path | Body |
 |--------|------|------|------|
 | buy | POST | /accounts/{account_id}/orders/buy | {stock_code, quantity} |
 | sell | POST | /accounts/{account_id}/orders/sell | {stock_code, quantity} |
 
-## History (Bearer Token + Account ID required)
+## History (Bearer Token required)
 
 | Action | HTTP | Path |
 |--------|------|------|
