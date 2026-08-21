@@ -14,7 +14,7 @@ description: >-
 
 Call a FinMeta **Task Agent** (`type=agent`: trading / deep-research / strategy / data-agent / hk-ai / test). The agent runs as an **async K8s Job** — the call returns immediately with a `run_id`; the result (a trading decision or report) is produced 1–10 minutes later. **Charges `call_credits` per call** after `free_call_quota`.
 
-> **Token**: auto-loaded from `~/.finmeta/config.json` (`access_token` field) — no `export` needed. Run `finmeta-plugin` setup first if missing. (Env var `FINMETA_ACCESS_TOKEN` overrides; `~/.finmeta/access_token` is a legacy fallback.)
+> **Token**: auto-loaded from `~/.finmeta/config.json` (`access_token` field) — no `export` needed. Run `finmeta-plugin` setup first if missing. (Env var `FINMETA_ACCESS_TOKEN` overrides.)
 
 ## Quick Start
 

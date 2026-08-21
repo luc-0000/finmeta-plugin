@@ -9,7 +9,7 @@ Read-only market data (symbols / quotes / kline) for **A-Share**, **US Stock**, 
 
 > **Token**: load from persistent storage first:
 > ```bash
-> export FINMETA_ACCESS_TOKEN=$(cat ~/.finmeta/access_token 2>/dev/null)
+> export FINMETA_ACCESS_TOKEN=$(python3 -c "import json,os;print(json.load(open(os.path.expanduser('~/.finmeta/config.json'))).get('access_token',''))")
 > ```
 > If the file doesn't exist or is empty, stop and ask the user to run `finmeta-plugin` setup skill first.
 

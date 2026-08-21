@@ -15,10 +15,7 @@ Env vars: FINMETA_ACCESS_TOKEN
 import argparse, json, os, sys
 from pathlib import Path
 
-SKILL_DIR = Path(__file__).resolve().parent.parent
-CONFIG_FILE = SKILL_DIR / "config.json"  # legacy: token field only
-TOKEN_FILE = Path.home() / ".finmeta" / "access_token"  # SSOT for access token
-ACCOUNTS_FILE = Path.home() / ".finmeta" / "config.json"  # SSOT for account_ids
+ACCOUNTS_FILE = Path.home() / ".finmeta" / "config.json"  # SSOT: access_token + accounts.*
 MARKET = "crypto"  # this module's key under accounts.*
 API_BASE = os.getenv("FINTOOLS_API_BASE", "https://fin-meta.net")
 MARKET_DATA_PREFIX = "/api/v1/crypto"  # 行情（市场 router，与模拟盘无关）
@@ -45,19 +42,6 @@ requests = _ensure_requests()
 
 # ═══════════ Config ═══════════
 
-def _load_config():
-    if CONFIG_FILE.exists():
-        try:
-            return json.loads(CONFIG_FILE.read_text())
-        except (json.JSONDecodeError, KeyError):
-            return {}
-    return {}
-
-
-def _save_config(cfg: dict):
-    CONFIG_FILE.write_text(json.dumps(cfg))
-
-
 def _load_token():
     token = os.getenv("FINMETA_ACCESS_TOKEN") or os.getenv("FINTOOLS_API_TOKEN")
     if token:
@@ -69,15 +53,19 @@ def _load_token():
                 return t
         except json.JSONDecodeError:
             pass
-    if TOKEN_FILE.exists():  # legacy fallback: ~/.finmeta/access_token
-        return TOKEN_FILE.read_text().strip()
-    return _load_config().get("token", "")
+    return ""
 
 
 def _save_token(token):
-    cfg = _load_config()
-    cfg["token"] = token
-    _save_config(cfg)
+    ACCOUNTS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    cfg = {}
+    if ACCOUNTS_FILE.exists():
+        try:
+            cfg = json.loads(ACCOUNTS_FILE.read_text())
+        except json.JSONDecodeError:
+            cfg = {}
+    cfg["access_token"] = token
+    ACCOUNTS_FILE.write_text(json.dumps(cfg, indent=2))
 
 
 def _load_account_id():
@@ -336,12 +324,12 @@ def main():
     parser.add_argument("--symbols")
     parser.add_argument("--quantity", type=float)
     parser.add_argument("--limit", type=int, default=100)
-    parser.add_argument("--token", help="Save API token to config.json")
+    parser.add_argument("--token", help="Save API token to ~/.finmeta/config.json")
     args = parser.parse_args()
 
     if args.token:
         _save_token(args.token)
-        print("Token saved to", CONFIG_FILE)
+        print("Token saved to", ACCOUNTS_FILE)
         if not args.action:
             return
 

@@ -14,7 +14,7 @@ Usage:
   python a2a_client.py --agent 1 --args '{"stock_code":"600519.SH"}'       # submit, return run_id
   python a2a_client.py --agent 1 --args '{"stock_code":"600519.SH"}' --wait # submit + poll + download report
 
-Token: FINMETA_ACCESS_TOKEN env var → ~/.finmeta/config.json (access_token) → ~/.finmeta/access_token.
+Token: FINMETA_ACCESS_TOKEN env var → ~/.finmeta/config.json (access_token).
 HTTP via curl (not urllib) — fin-meta.net sits behind Cloudflare bot-fight.
 
 Exit codes: 0 = completed, 1 = run failed, 124 = poll timeout (agent may still be running).
@@ -37,7 +37,6 @@ def load_token():
     """Same precedence as the other plugin skills (simulation api.py):
     1. FINMETA_ACCESS_TOKEN env var
     2. ~/.finmeta/config.json  →  access_token   (SSOT)
-    3. ~/.finmeta/access_token                  (legacy fallback)
     """
     token = os.environ.get("FINMETA_ACCESS_TOKEN")
     if token:
@@ -49,14 +48,6 @@ def load_token():
             if t:
                 return t
     except (FileNotFoundError, json.JSONDecodeError):
-        pass
-    legacy_path = os.path.expanduser("~/.finmeta/access_token")
-    try:
-        with open(legacy_path) as f:
-            t = f.read().strip()
-            if t:
-                return t
-    except FileNotFoundError:
         pass
     return None
 

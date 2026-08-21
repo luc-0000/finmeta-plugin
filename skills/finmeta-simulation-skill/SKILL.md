@@ -10,7 +10,7 @@ Covers **A-Share** (`ashare/`), **Crypto** (`crypto/`), **US Stock** (`usstock/`
 ## Quick Start
 
 ```bash
-# Token: auto-loaded from ~/.finmeta/access_token by api.py (no export needed)
+# Token: auto-loaded from ~/.finmeta/config.json by api.py (no export needed)
 # A-Share account_id is read from ~/.finmeta/config.json — see Setup to save it
 
 # A-Share
@@ -36,7 +36,7 @@ python hkstock/api.py --action buy --symbol 00700.HK --quantity 10
 
 ## Setup
 
-> **Token**: auto-loaded from `~/.finmeta/access_token` by `api.py` — no export needed.
+> **Token**: auto-loaded from `~/.finmeta/config.json` by `api.py` — no export needed.
 > If the file doesn't exist, stop and ask the user to run `finmeta-plugin` setup skill first.
 
 ```bash
@@ -123,7 +123,7 @@ python ashare/api.py --account-id 123
 
 ### First Run — Token & Account Setup
 
-1. Token: load from `~/.finmeta/access_token`. If missing, invoke `finmeta-plugin` setup skill.
+1. Token: load from `~/.finmeta/config.json` (`access_token`). If missing, invoke `finmeta-plugin` setup skill.
 2. For A-Share: read account_id from `~/.finmeta/config.json` (`accounts.ashare`).
 3. If A-Share account_id is missing (but token is set):
    - List accounts: `curl -H "Authorization: Bearer $FINMETA_ACCESS_TOKEN" https://fin-meta.net/api/v1/simulation/accounts?lightweight=true&market=ashare`
