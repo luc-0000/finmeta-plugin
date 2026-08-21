@@ -1,11 +1,11 @@
 ---
 name: finmeta-simulation-skill
-description: Unified simulation trading skill. Supports A-Share, US Stock, and Crypto markets — market data, account queries, trading (buy/sell), and order history. Use when the user wants to check prices, analyze charts, manage simulation accounts, or place trades in any of these markets.
+description: Unified simulation trading skill. Supports A-Share, US Stock, HK Stock, and Crypto markets — market data, account queries, trading (buy/sell), and order history. Use when the user wants to check prices, analyze charts, manage simulation accounts, or place trades in any of these markets.
 ---
 
 # FinMeta Simulation Trading
 
-Covers **A-Share** (`ashare/`), **Crypto** (`crypto/`), and **US Stock** (`usstock/`). Each sub-module has its own `api.py` and `api_reference.md`.
+Covers **A-Share** (`ashare/`), **Crypto** (`crypto/`), **US Stock** (`usstock/`), and **HK Stock** (`hkstock/`). Each sub-module has its own `api.py` and `api_reference.md`.
 
 ## Quick Start
 
@@ -27,6 +27,11 @@ python crypto/api.py --action buy --symbol BTC/USDT --quantity 0.01
 python usstock/api.py --action get_quotes --symbols "AAPL,MSFT"
 python usstock/api.py --action account
 python usstock/api.py --action buy --symbol AAPL --quantity 10
+
+# HK Stock
+python hkstock/api.py --action get_quotes --symbols "00700.HK,00005.HK"
+python hkstock/api.py --action account
+python hkstock/api.py --action buy --symbol 00700.HK --quantity 10
 ```
 
 ## Setup
@@ -40,7 +45,7 @@ python ashare/api.py --account-id 123
 ```
 
 - **Account ID** (A-Share only): My Simulation → click ID chip to copy
-- Crypto and US Stock auto-resolve accounts — no account_id needed
+- Crypto, US Stock, and HK Stock auto-resolve accounts — no account_id needed
 - Saved account IDs live in `~/.finmeta/config.json` under `accounts.<market>`; every trade reads from there at runtime
 
 ## Tools
@@ -93,6 +98,23 @@ python ashare/api.py --account-id 123
 
 **US Stock notes**: T+0, lot_size=1 (integer shares), zero commission, no daily limit. Quantity negative = USD amount (resolves to floor(USD/price) shares). Universe = S&P 500.
 
+### HK Stock (`hkstock/api.py`)
+
+| Action | Command |
+|--------|---------|
+| Stock list | `--action list_stocks` |
+| Quotes | `--action get_quotes --symbols "00700.HK"` |
+| K-line | `--action kline --symbol 00700.HK --period 1d` |
+| Account | `--action account` |
+| Positions | `--action positions` |
+| Buy | `--action buy --symbol 00700.HK --quantity 10` |
+| Sell | `--action sell --symbol 00700.HK --quantity 10` |
+| Orders | `--action orders` |
+| Balance log | `--action balance_log` |
+| Rules | `--action rules` |
+
+**HK Stock notes**: T+0, lot_size=10, commission 0.1% (min HK$5), stamp tax 0.1% (sell only), no daily limit. Symbol = 5-digit code with `.HK` suffix (`00700.HK`, keep leading zeros). Kline `--period`: `1m` `5m` `1h` `1d`, refreshed every 5 min during HK trading hours (09:30–16:00 HKT). Universe = 142 competition symbols, not the full HK market.
+
 ## Agent Notes
 
 > ⚠️ **Account ID source of truth = `~/.finmeta/config.json`** (key `accounts.<market>`).
@@ -129,6 +151,7 @@ python crypto/api.py --action buy --symbol BTC/USDT --quantity 0.01
 from finmeta_simulation_skill.ashare import buy as ashare_buy, get_account as ashare_account
 from finmeta_simulation_skill.crypto import buy as crypto_buy, get_account as crypto_account
 from finmeta_simulation_skill.usstock import buy as usstock_buy, get_account as usstock_account
+from finmeta_simulation_skill.hkstock import buy as hkstock_buy, get_account as hkstock_account
 
 # A-Share — account_id optional (reads from env var / config.json)
 result = ashare_buy("600519.SH", 100, account_id=123)
@@ -138,4 +161,7 @@ result = crypto_buy("BTC/USDT", 0.01)
 
 # US Stock — account_id optional (auto-creates personal account)
 result = usstock_buy("AAPL", 10)
+
+# HK Stock — no account_id needed (auto-creates personal account)
+result = hkstock_buy("00700.HK", 10)
 ```

@@ -1,12 +1,12 @@
-# US Stock Simulation API Reference
+# HK Stock Simulation API Reference
 
-Base: `https://fin-meta.net/api/v1/usstock`
+Base: `https://fin-meta.net/api/v1/hkstock`
 
 ## Market Data (no auth)
 
 | Action | HTTP | Path |
 |--------|------|------|
-| list_symbols | GET | /symbols |
+| list_stocks | GET | /stocks |
 | get_quotes | GET | /quotes?symbols= |
 | kline | GET | /kline?symbol=&limit=&period= |
 | rules | GET | /rules |
@@ -30,9 +30,9 @@ Base: `https://fin-meta.net/api/v1/usstock`
 
 ## Notes
 
-- Symbol format: plain ticker, e.g. `AAPL`, `MSFT`, `GOOGL` (no exchange suffix).
-- Quantity: integer shares (lot_size = 1). Negative quantity = USD amount, resolves to floor(USD/price) shares.
-- Price source: `us_stock_symbols.price`, refreshed every 5 min via Alpaca IEX snapshots (15-min delayed).
-- T+0 settlement, no daily price limit, zero commission.
-- Symbol universe: S&P 500 only.
-- Kline `period`: `5m` (native) · `1h` · `1d` (aggregated from 5m).
+- Symbol format: 5-digit code with `.HK` suffix, e.g. `00700.HK`, `09988.HK` (keep leading zeros).
+- Kline `period`: `1m` (native) · `5m` · `1h` · `1d` (aggregated from 1m). Refreshed every 5 min during HK trading hours (09:30–16:00 HKT).
+- Lot size 10 shares; T+0 settlement; no daily price limit.
+- Commission 0.1% (min HK$5); stamp tax 0.1% (sell only).
+- Symbol universe: 142 competition symbols (HK.AI list), not the full HK market.
+- Account auto-creates on first trade if no account_id passed.

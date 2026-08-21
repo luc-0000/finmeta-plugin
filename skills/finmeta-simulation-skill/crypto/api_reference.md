@@ -15,8 +15,9 @@ Base: `https://fin-meta.net/api/v1/crypto`
 
 | Action | HTTP | Path | Body |
 |--------|------|------|------|
-| account | GET | /account?account_id= | — |
-| positions | GET | /positions?account_id= | — |
+| account (list) | GET | /accounts | — |
+| account (detail) | GET | /accounts/{id} | — |
+| positions | GET | /accounts/{id}/positions | — |
 | buy | POST | /orders/buy | {symbol, quantity, account_id?} |
 | sell | POST | /orders/sell | {symbol, quantity, account_id?} |
 
@@ -24,5 +25,5 @@ Base: `https://fin-meta.net/api/v1/crypto`
 
 | Action | HTTP | Path |
 |--------|------|------|
-| orders | GET | /orders?limit=&account_id= |
-| balance_log | GET | /balance-log?page=&limit=&account_id= |
+| orders | GET | /accounts/{id}/orders?limit= |
+| balance_log | GET | /accounts/{id}/balance-log?page=&limit= |

@@ -181,28 +181,45 @@ def get_quotes(symbols):
     return _get("/quotes", {"symbols": ",".join(symbols)})
 
 
-def get_kline(symbol: str, limit: int = 100, timeframe: str = "5Min"):
+def get_kline(symbol: str, limit: int = 100, period: str = "5m"):
     """Query kline (OHLCV) for a symbol.
 
     Args:
         symbol: ticker, e.g. AAPL
         limit: number of klines to return, max 500
-        timeframe: 1Min | 5Min | 15Min | 1Hour | 1Day (default 5Min)
+        period: 5m | 1h | 1d (default 5m; 1h/1d aggregated from 5m)
     """
-    return _get("/kline", {"symbol": symbol, "limit": min(limit, 500), "timeframe": timeframe})
+    return _get("/kline", {"symbol": symbol, "limit": min(limit, 500), "period": period})
 
 
 # === Account (requires account_id) ===
+
+def _pick_account_id():
+    """Resolve account_id: env/config override → personal account from GET /accounts."""
+    aid = _require_account_id()
+    if aid:
+        return aid
+    resp = _get("/accounts")
+    if not resp.get("success"):
+        return None
+    accounts = resp.get("data", {}).get("data", {}).get("accounts", [])
+    personal = next((a for a in accounts if a.get("competition_id") is None), None)
+    acc = personal or (accounts[0] if accounts else None)
+    return acc.get("id") if acc else None
+
 
 def get_account(account_id: int = None):
     """Get account overview (balance, market value, P/L).
 
     Args:
-        account_id: optional — reads from FINTOOLS_SIMULATION_ACCOUNT_ID env var if omitted.
+        account_id: optional — with it returns single-account detail;
+            without it returns all your accounts with aggregate stats.
     """
     _require_token()
     aid = account_id if account_id is not None else _require_account_id()
-    return _get(f"/account?account_id={aid}" if aid else "/account")
+    if aid:
+        return _get(f"/accounts/{aid}")
+    return _get("/accounts")
 
 
 # === Trading (requires account_id) ===
@@ -252,29 +269,27 @@ def get_positions(account_id: int = None):
     """Get current holdings with unrealized P/L.
 
     Args:
-        account_id: optional — reads from FINTOOLS_SIMULATION_ACCOUNT_ID env var if omitted.
+        account_id: optional — auto-resolves your personal account if omitted.
     """
     _require_token()
-    aid = account_id if account_id is not None else _require_account_id()
-    params = {}
-    if aid:
-        params["account_id"] = aid
-    return _get("/positions", params)
+    aid = account_id if account_id is not None else _pick_account_id()
+    if not aid:
+        return {"success": False, "error": "No accounts found — place a trade first (auto-creates one)"}
+    return _get(f"/accounts/{aid}/positions")
 
 
 def get_orders(limit: int = 20, account_id: int = None):
     """Query trade history.
 
     Args:
-        limit: max results (default 20, max 100).
-        account_id: optional — reads from FINTOOLS_SIMULATION_ACCOUNT_ID env var if omitted.
+        limit: max results (default 20, max 200).
+        account_id: optional — auto-resolves your personal account if omitted.
     """
     _require_token()
-    aid = account_id if account_id is not None else _require_account_id()
-    params = {"limit": min(limit, 100)}
-    if aid:
-        params["account_id"] = aid
-    return _get("/orders", params)
+    aid = account_id if account_id is not None else _pick_account_id()
+    if not aid:
+        return {"success": False, "error": "No accounts found — place a trade first (auto-creates one)"}
+    return _get(f"/accounts/{aid}/orders", {"limit": min(limit, 200)})
 
 
 def get_balance_log(page: int = 1, limit: int = 50, account_id: int = None):
@@ -283,14 +298,13 @@ def get_balance_log(page: int = 1, limit: int = 50, account_id: int = None):
     Args:
         page: page number (1-indexed).
         limit: max results per page (default 50, max 200).
-        account_id: optional — reads from FINTOOLS_SIMULATION_ACCOUNT_ID env var if omitted.
+        account_id: optional — auto-resolves your personal account if omitted.
     """
     _require_token()
-    aid = account_id if account_id is not None else _require_account_id()
-    params = {"page": page, "limit": min(limit, 200)}
-    if aid:
-        params["account_id"] = aid
-    return _get("/balance-log", params)
+    aid = account_id if account_id is not None else _pick_account_id()
+    if not aid:
+        return {"success": False, "error": "No accounts found — place a trade first (auto-creates one)"}
+    return _get(f"/accounts/{aid}/balance-log", {"page": page, "limit": min(limit, 200)})
 
 
 # ═══════════ CLI ═══════════
@@ -302,7 +316,7 @@ def main():
     parser.add_argument("--symbols")
     parser.add_argument("--quantity", type=float)
     parser.add_argument("--limit", type=int, default=100)
-    parser.add_argument("--timeframe", default="5Min")
+    parser.add_argument("--period", default="5m")
     parser.add_argument("--token", help="Save API token to config.json")
     parser.add_argument("--account-id", type=int, help="Save simulation account_id to config.json")
     args = parser.parse_args()
@@ -331,7 +345,7 @@ def main():
     elif args.action == "get_quotes":
         result = get_quotes(args.symbols) if args.symbols else {"success": False, "error": "missing --symbols"}
     elif args.action == "kline":
-        result = get_kline(args.symbol, args.limit, args.timeframe) if args.symbol else {"success": False, "error": "missing --symbol"}
+        result = get_kline(args.symbol, args.limit, args.period) if args.symbol else {"success": False, "error": "missing --symbol"}
     elif args.action == "account":
         result = get_account()
     elif args.action == "positions":

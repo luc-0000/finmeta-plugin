@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
-Crypto simulation trading.
+HK Stock simulation trading.
 
 Used via the unified skill:
-    from finmeta_simulation_skill.crypto import buy, get_account
+    from finmeta_simulation_skill.hkstock import buy, get_account
 
 Or CLI (from skill root):
-    python crypto/api.py --action account
-    python crypto/api.py --action buy --symbol BTC/USDT --quantity 0.01
+    python hkstock/api.py --action account
+    python hkstock/api.py --action buy --symbol 00700.HK --quantity 10
 
-Env vars: FINMETA_ACCESS_TOKEN
+Env vars: FINMETA_ACCESS_TOKEN, FINTOOLS_SIMULATION_ACCOUNT_ID (optional)
 """
 
 import argparse, json, os, sys
@@ -19,9 +19,9 @@ SKILL_DIR = Path(__file__).resolve().parent.parent
 CONFIG_FILE = SKILL_DIR / "config.json"  # legacy: token field only
 TOKEN_FILE = Path.home() / ".finmeta" / "access_token"  # SSOT for access token
 ACCOUNTS_FILE = Path.home() / ".finmeta" / "config.json"  # SSOT for account_ids
-MARKET = "crypto"  # this module's key under accounts.*
+MARKET = "hkstock"  # this module's key under accounts.*
 API_BASE = os.getenv("FINTOOLS_API_BASE", "https://fin-meta.net")
-API_PREFIX = "/api/v1/crypto"
+API_PREFIX = "/api/v1/hkstock"
 
 
 def _ensure_requests():
@@ -108,7 +108,7 @@ def _save_account_id(account_id: int):
 
 
 def _require_account_id():
-    """Read account_id from env/config, fall back to None (crypto auto-creates)."""
+    """Read account_id from env/config, fall back to None (hkstock auto-creates)."""
     return _load_account_id()
 
 
@@ -156,7 +156,7 @@ def _require_token():
     if not token:
         print(
             "Missing API token. Get yours from https://fin-meta.net/profile, then:\n"
-            "  python crypto/api.py --token YOUR_TOKEN",
+            "  python hkstock/api.py --token YOUR_TOKEN",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -165,30 +165,36 @@ def _require_token():
 
 # === Market Data (no auth) ===
 
+def list_stocks():
+    """List all supported HK stock symbols (142 competition symbols)."""
+    return _get("/stocks")
+
+
+# alias for cross-module consistency (crypto/usstock use list_symbols)
 def list_symbols():
-    """List all supported crypto trading pairs."""
-    return _get("/symbols")
+    return list_stocks()
 
 
 def get_quotes(symbols):
     """Batch query quotes for given symbols.
 
     Args:
-        symbols: comma-separated string or list, e.g. "BTC/USDT,ETH/USDT"
+        symbols: comma-separated string or list, e.g. "00700.HK,00005.HK"
     """
     if isinstance(symbols, str):
         symbols = [s.strip() for s in symbols.split(",")]
     return _get("/quotes", {"symbols": ",".join(symbols)})
 
 
-def get_kline(symbol: str, limit: int = 100):
+def get_kline(symbol: str, limit: int = 100, period: str = "1d"):
     """Query kline (OHLCV) for a symbol.
 
     Args:
-        symbol: trading pair, e.g. BTC/USDT
+        symbol: 5-digit HK code with .HK suffix, e.g. 00700.HK
         limit: number of klines to return, max 500
+        period: 1m | 5m | 1h | 1d (default 1d; 1m native, others aggregated)
     """
-    return _get("/kline", {"symbol": symbol, "limit": min(limit, 500)})
+    return _get("/kline", {"symbol": symbol, "limit": min(limit, 500), "period": period})
 
 
 # === Account (requires account_id) ===
@@ -212,7 +218,7 @@ def get_account(account_id: int = None):
 
     Args:
         account_id: optional — with it returns single-account detail;
-            without it returns all your accounts with aggregate stats.
+            without it returns all your HK accounts with aggregate stats.
     """
     _require_token()
     aid = account_id if account_id is not None else _require_account_id()
@@ -224,11 +230,11 @@ def get_account(account_id: int = None):
 # === Trading (requires account_id) ===
 
 def buy(symbol: str, quantity: float, account_id: int = None):
-    """Buy crypto.
+    """Buy HK stock.
 
     Args:
-        symbol: trading pair, e.g. BTC/USDT
-        quantity: amount in base currency, e.g. 0.01 BTC
+        symbol: 5-digit HK code, e.g. 00700.HK
+        quantity: shares (lot size 10)
         account_id: optional — reads from FINTOOLS_SIMULATION_ACCOUNT_ID env var if omitted.
     """
     _require_token()
@@ -240,11 +246,11 @@ def buy(symbol: str, quantity: float, account_id: int = None):
 
 
 def sell(symbol: str, quantity: float, account_id: int = None):
-    """Sell crypto.
+    """Sell HK stock (T+0 — can sell same day).
 
     Args:
-        symbol: trading pair, e.g. BTC/USDT
-        quantity: amount in base currency, e.g. 0.01 BTC
+        symbol: 5-digit HK code, e.g. 00700.HK
+        quantity: shares (lot size 10)
         account_id: optional — reads from FINTOOLS_SIMULATION_ACCOUNT_ID env var if omitted.
     """
     _require_token()
@@ -258,7 +264,7 @@ def sell(symbol: str, quantity: float, account_id: int = None):
 # === Rules (no auth) ===
 
 def get_rules():
-    """Get crypto trading rules (min order size, commission, etc.)."""
+    """Get HK stock trading rules (lot size, commission, T+0, etc.)."""
     return _get("/rules")
 
 
@@ -273,7 +279,7 @@ def get_positions(account_id: int = None):
     _require_token()
     aid = account_id if account_id is not None else _pick_account_id()
     if not aid:
-        return {"success": False, "error": "No accounts found — place a trade first (auto-creates one)"}
+        return {"success": False, "error": "No HK accounts found — place a trade first (auto-creates one)"}
     return _get(f"/accounts/{aid}/positions")
 
 
@@ -287,7 +293,7 @@ def get_orders(limit: int = 20, account_id: int = None):
     _require_token()
     aid = account_id if account_id is not None else _pick_account_id()
     if not aid:
-        return {"success": False, "error": "No accounts found — place a trade first (auto-creates one)"}
+        return {"success": False, "error": "No HK accounts found — place a trade first (auto-creates one)"}
     return _get(f"/accounts/{aid}/orders", {"limit": min(limit, 200)})
 
 
@@ -302,25 +308,31 @@ def get_balance_log(page: int = 1, limit: int = 50, account_id: int = None):
     _require_token()
     aid = account_id if account_id is not None else _pick_account_id()
     if not aid:
-        return {"success": False, "error": "No accounts found — place a trade first (auto-creates one)"}
+        return {"success": False, "error": "No HK accounts found — place a trade first (auto-creates one)"}
     return _get(f"/accounts/{aid}/balance-log", {"page": page, "limit": min(limit, 200)})
 
 
 # ═══════════ CLI ═══════════
 
 def main():
-    parser = argparse.ArgumentParser(description="Crypto simulation trading CLI")
+    parser = argparse.ArgumentParser(description="HK Stock simulation trading CLI")
     parser.add_argument("--action", required=False, default="")
     parser.add_argument("--symbol")
     parser.add_argument("--symbols")
     parser.add_argument("--quantity", type=float)
     parser.add_argument("--limit", type=int, default=100)
+    parser.add_argument("--period", default="1d")
     parser.add_argument("--token", help="Save API token to config.json")
+    parser.add_argument("--account-id", type=int, help="Save simulation account_id to config.json")
     args = parser.parse_args()
 
     if args.token:
         _save_token(args.token)
         print("Token saved to", CONFIG_FILE)
+    if args.account_id:
+        _save_account_id(args.account_id)
+        print(f"Account ID saved to {ACCOUNTS_FILE} (accounts.{MARKET})")
+    if args.token or args.account_id:
         if not args.action:
             return
 
@@ -333,12 +345,12 @@ def main():
     if args.action in AUTH_ACTIONS:
         _require_token()
 
-    if args.action == "list_symbols":
-        result = list_symbols()
+    if args.action in ("list_stocks", "list_symbols"):
+        result = list_stocks()
     elif args.action == "get_quotes":
         result = get_quotes(args.symbols) if args.symbols else {"success": False, "error": "missing --symbols"}
     elif args.action == "kline":
-        result = get_kline(args.symbol, args.limit) if args.symbol else {"success": False, "error": "missing --symbol"}
+        result = get_kline(args.symbol, args.limit, args.period) if args.symbol else {"success": False, "error": "missing --symbol"}
     elif args.action == "account":
         result = get_account()
     elif args.action == "positions":

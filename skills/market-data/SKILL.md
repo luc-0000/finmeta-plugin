@@ -59,7 +59,7 @@ curl -H "Authorization: Bearer $FINMETA_ACCESS_TOKEN" \
 
 ## Kline (candles)
 
-`period`: A-Share `5m|1h|1d`, US Stock `5m|1h|1d`, HK Stock `1m|5m|15m|1h|1d`, Crypto `1m|5m|1h|1d`. `limit`: 1–500 (default 100).
+`period`: A-Share `5m|1h|1d`, US Stock `5m|1h|1d`, HK Stock `1m|5m|1h|1d`, Crypto `1m|5m|1h|1d`. `limit`: 1–500 (default 100).
 
 > **US Stock**: native bar is 5m; `1h` and `1d` are server-aggregated from 5m. Use `period=1d` for daily candles — do NOT pull 5m and aggregate client-side.
 
@@ -87,8 +87,8 @@ curl -H "Authorization: Bearer $FINMETA_ACCESS_TOKEN" \
 
 ## Notes
 
-- A-Share/HK Stock symbols returns the full active list; use `keyword` + `limit` to filter.
+- A-Share symbols returns the full active list; use `keyword` + `limit` to filter. HK Stock symbols covers 142 competition symbols only — see `README.md`.
 - Crypto kline data is 1-minute native; larger periods are server-aggregated.
-- HK Stock kline database only has 1Min data; larger periods return empty.
+- HK Stock kline updates every 5 minutes during HK trading hours (09:30–16:00 HKT); `1m` is native, `5m`/`1h`/`1d` are server-aggregated from 1m.
 - No account needed; no credits charged.
 - For trading / account / orders, use `finmeta-simulation-skill` instead.
