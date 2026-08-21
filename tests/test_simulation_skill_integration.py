@@ -6,10 +6,11 @@ FINTOOLS_API_BASE / FINMETA_ACCESS_TOKEN / FINTOOLS_SIMULATION_ACCOUNT_ID，
 不是重新实现 HTTP 调用。
 
 跑法（token 从本地 backend .env 取，不落盘）：
-  TOKEN=$(grep -E '^FINMETA_ACCESS_TOKEN=' /Users/lu/development/fintools/fintools_backend/.env \
+  TOKEN=$(grep -E '^FINMETA_ACCESS_TOKEN=' "$FINTOOLS_REPO/fintools_backend/.env" \
     | sed 's/^FINMETA_ACCESS_TOKEN=//' | tr -d '\r\n')
   FINMETA_ACCESS_TOKEN=$TOKEN conda run --no-capture-output -n fintools_backend \
-    python -u /Users/lu/development/fintools_all/skills/finmeta-plugin/tests/test_simulation_skill_integration.py
+    python -u tests/test_simulation_skill_integration.py
+  # FINTOOLS_REPO = fintools 主仓库路径；在 finmeta-plugin repo 根目录下执行
 
 净零清理：每个 market 建独立测试盘（skill-integration-<market>），
 tearDownClass 统一 DELETE（级联清 positions/orders/balance_log）。
@@ -27,8 +28,7 @@ from pathlib import Path
 
 import requests
 
-SKILL_ROOT = Path("/Users/lu/development/fintools_all/skills/finmeta-plugin/"
-                  "skills/finmeta-simulation-skill")
+SKILL_ROOT = Path(__file__).resolve().parents[1] / "skills" / "finmeta-simulation-skill"
 API_BASE = os.environ.setdefault("FINTOOLS_API_BASE", "http://localhost:8000")
 TOKEN = os.environ.get("FINMETA_ACCESS_TOKEN", "")
 
