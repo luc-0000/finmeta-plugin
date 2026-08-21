@@ -40,3 +40,34 @@ claude --plugin-dir /Users/lu/development/fintools_all/skills/finmeta-plugin
 ```
 
 Reload after edits: `/reload-plugins`.
+
+## Install in Hermes
+
+This repo is a Claude-Code-format bundle (`.claude-plugin/` + `skills/`, no
+`plugin.yaml`), so it is **not** a native Hermes plugin. Do **not** use
+`hermes skills install luc-0000/finmeta-plugin/skills/<name>` — Hermes' GitHub
+fetcher only downloads files referenced from `SKILL.md` that live under its
+allowlisted support dirs (`references/`, `templates/`, `scripts/`, `assets/`,
+`examples/`). This plugin's code lives in custom dirs (`ashare/`, `crypto/`,
+`hkstock/`, `usstock/`), so that command would install a hollow `SKILL.md` with
+no `api.py` and the skill would fail at runtime.
+
+Clone the repo and **copy** (never symlink) each skill directory into Hermes'
+discovery path:
+
+```bash
+git clone https://github.com/luc-0000/finmeta-plugin.git ~/.hermes/plugins/finmeta-plugin
+
+# root credentials skill
+mkdir -p ~/.hermes/skills/finmeta-plugin
+cp ~/.hermes/plugins/finmeta-plugin/SKILL.md ~/.hermes/skills/finmeta-plugin/
+
+# bundled skills
+for s in ~/.hermes/plugins/finmeta-plugin/skills/*/; do
+  cp -R "$s" ~/.hermes/skills/"$(basename "$s")"
+done
+```
+
+- **Copy, don't symlink.** Keep installed skills independent of the clone.
+- **To update**: `git -c http.version=HTTP/1.1 -C ~/.hermes/plugins/finmeta-plugin pull origin main`, then re-run the copy steps above (the copies don't follow the clone).
+- If `git` fails with `Error in the HTTP2 framing layer`, retry with the `-c http.version=HTTP/1.1` flag.

@@ -1,6 +1,6 @@
 ---
 name: finmeta-plugin
-description: Set up FinMeta API credentials (FINMETA_ACCESS_TOKEN + simulation account_id) in ~/.finmeta/config.json. Use when any FinMeta skill needs credentials, the user asks about authentication, or a 401 error occurs. Single source of truth — all other finmeta-plugin skills depend on it.
+description: Set up FinMeta API credentials (FINMETA_ACCESS_TOKEN + simulation account_id) in ~/.finmeta/config.json. Use when configuring the FinMeta access token, when any FinMeta skill needs credentials, or when a FinMeta API call returns 401 (token expired). Single source of truth — all other finmeta-plugin skills depend on it.
 ---
 
 # FinMeta Plugin — Credentials Setup
@@ -71,3 +71,38 @@ Find your account ID: My Simulation page → click the ID chip to copy.
 | `GITEA_ACCESS_TOKEN` | **Admin/service token** — backend only, never expose to skills |
 
 The old names `FINTOOLS_ACCESS_TOKEN` / `FINTOOLS_API_TOKEN` are deprecated — always use `FINMETA_ACCESS_TOKEN`.
+
+## Installing in Hermes
+
+This plugin is a **Claude-Code-format bundle** (`.claude-plugin/` + `skills/`, no
+`plugin.yaml`), so it is **not** a native Hermes plugin. Do **not** use
+`hermes skills install luc-0000/finmeta-plugin/skills/<name>` — Hermes' GitHub
+fetcher only downloads files referenced from `SKILL.md` that live under its
+allowlisted support dirs (`references/`, `templates/`, `scripts/`, `assets/`,
+`examples/`). This plugin's code lives in custom dirs (`ashare/`, `crypto/`,
+`hkstock/`, `usstock/`), so that command would install a hollow `SKILL.md` with
+no `api.py` and the skill would fail at runtime.
+
+Install by cloning the repo and **copying** (never symlinking) each skill
+directory into Hermes' discovery path:
+
+```bash
+git clone https://github.com/luc-0000/finmeta-plugin.git ~/.hermes/plugins/finmeta-plugin
+
+# root credentials skill (this file)
+mkdir -p ~/.hermes/skills/finmeta-plugin
+cp ~/.hermes/plugins/finmeta-plugin/SKILL.md ~/.hermes/skills/finmeta-plugin/
+
+# bundled skills
+for s in ~/.hermes/plugins/finmeta-plugin/skills/*/; do
+  cp -R "$s" ~/.hermes/skills/"$(basename "$s")"
+done
+```
+
+Notes:
+
+- **Copy, don't symlink.** Keep installed skills independent of the clone.
+- **To update**: `git -c http.version=HTTP/1.1 -C ~/.hermes/plugins/finmeta-plugin pull origin main`,
+  then re-run the copy steps above (the copies don't follow the clone).
+- If `git` fails with an `Error in the HTTP2 framing layer`, retry with the
+  `-c http.version=HTTP/1.1` flag shown above.
