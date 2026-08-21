@@ -21,7 +21,8 @@ TOKEN_FILE = Path.home() / ".finmeta" / "access_token"  # SSOT for access token
 ACCOUNTS_FILE = Path.home() / ".finmeta" / "config.json"  # SSOT for account_ids
 MARKET = "ashare"  # this module's key under accounts.*
 API_BASE = os.getenv("FINTOOLS_API_BASE", "https://fin-meta.net")
-API_PREFIX = "/api/v1/ashare"
+MARKET_DATA_PREFIX = "/api/v1/ashare"  # 行情（市场 router，与模拟盘无关）
+SIM_PREFIX = "/api/v1/simulation"     # 模拟盘 canonical（2026-08-21 路由统一）
 
 
 def _ensure_requests():
@@ -111,12 +112,18 @@ def _headers():
 
 
 def _url(path: str) -> str:
-    return f"{API_BASE}{API_PREFIX}{path}"
+    return f"{API_BASE}{MARKET_DATA_PREFIX}{path}"
 
 
-def _get(path, params=None):
+def _sim_url(path: str) -> str:
+    """模拟盘 canonical 路径：/api/v1/simulation/*。"""
+    return f"{API_BASE}{SIM_PREFIX}{path}"
+
+
+def _get(path, params=None, sim: bool = False):
     try:
-        r = requests.get(_url(path), headers=_headers(), params=params, timeout=60)
+        r = requests.get(_sim_url(path) if sim else _url(path),
+                         headers=_headers(), params=params, timeout=60)
         r.raise_for_status()
         return {"success": True, "data": r.json()}
     except requests.exceptions.RequestException as e:
@@ -124,8 +131,9 @@ def _get(path, params=None):
 
 
 def _post(path, body=None):
+    """POST（模拟盘专用，path 为 /api/v1/simulation 下的完整段）。"""
     try:
-        r = requests.post(_url(path), headers=_headers(), json=body or {}, timeout=60)
+        r = requests.post(_sim_url(path), headers=_headers(), json=body or {}, timeout=60)
         r.raise_for_status()
         return {"success": True, "data": r.json()}
     except requests.exceptions.RequestException as e:
@@ -200,7 +208,7 @@ def get_account(account_id: int = None):
         account_id: optional — reads from FINTOOLS_SIMULATION_ACCOUNT_ID env var if omitted.
     """
     aid = account_id if account_id is not None else _require_account_id()
-    return _get(f"/accounts/{aid}")
+    return _get(f"/accounts/{aid}", sim=True)
 
 
 def get_positions(account_id: int = None):
@@ -210,7 +218,7 @@ def get_positions(account_id: int = None):
         account_id: optional — reads from FINTOOLS_SIMULATION_ACCOUNT_ID env var if omitted.
     """
     aid = account_id if account_id is not None else _require_account_id()
-    return _get(f"/accounts/{aid}/positions")
+    return _get(f"/accounts/{aid}/positions", sim=True)
 
 
 # === Trading (requires account_id) ===
@@ -224,7 +232,8 @@ def buy(stock_code: str, quantity: int, account_id: int = None):
         account_id: optional — reads from FINTOOLS_SIMULATION_ACCOUNT_ID env var if omitted.
     """
     aid = account_id if account_id is not None else _require_account_id()
-    return _post(f"/accounts/{aid}/orders/buy", {"stock_code": stock_code, "quantity": quantity})
+    return _post(f"/{MARKET}/accounts/{aid}/orders/buy",
+                 {"stock_code": stock_code, "quantity": quantity})
 
 
 def sell(stock_code: str, quantity: int, account_id: int = None):
@@ -236,7 +245,8 @@ def sell(stock_code: str, quantity: int, account_id: int = None):
         account_id: optional — reads from FINTOOLS_SIMULATION_ACCOUNT_ID env var if omitted.
     """
     aid = account_id if account_id is not None else _require_account_id()
-    return _post(f"/accounts/{aid}/orders/sell", {"stock_code": stock_code, "quantity": quantity})
+    return _post(f"/{MARKET}/accounts/{aid}/orders/sell",
+                 {"stock_code": stock_code, "quantity": quantity})
 
 
 # === History (requires account_id) ===
@@ -249,31 +259,31 @@ def get_orders(limit: int = 50, account_id: int = None):
         account_id: optional — reads from FINTOOLS_SIMULATION_ACCOUNT_ID env var if omitted.
     """
     aid = account_id if account_id is not None else _require_account_id()
-    return _get(f"/accounts/{aid}/orders", {"limit": min(limit, 200)})
+    return _get(f"/accounts/{aid}/orders", {"limit": min(limit, 200)}, sim=True)
 
 
 def get_buy_orders(page: int = 1, limit: int = 50, account_id: int = None):
     """Get buy orders (paginated). account_id is optional."""
     aid = account_id if account_id is not None else _require_account_id()
-    return _get(f"/accounts/{aid}/orders", {"page": page, "limit": min(limit, 200), "side": "buy"})
+    return _get(f"/accounts/{aid}/orders", {"page": page, "limit": min(limit, 200), "side": "buy"}, sim=True)
 
 
 def get_sell_orders(page: int = 1, limit: int = 50, account_id: int = None):
     """Get sell orders (paginated). account_id is optional."""
     aid = account_id if account_id is not None else _require_account_id()
-    return _get(f"/accounts/{aid}/orders", {"page": page, "limit": min(limit, 200), "side": "sell"})
+    return _get(f"/accounts/{aid}/orders", {"page": page, "limit": min(limit, 200), "side": "sell"}, sim=True)
 
 
 def get_balance_log(page: int = 1, limit: int = 50, account_id: int = None):
     """Get balance change log (paginated). account_id is optional."""
     aid = account_id if account_id is not None else _require_account_id()
-    return _get(f"/accounts/{aid}/balance-log", {"page": page, "limit": min(limit, 200)})
+    return _get(f"/accounts/{aid}/balance-log", {"page": page, "limit": min(limit, 200)}, sim=True)
 
 
 def get_fee_log(page: int = 1, limit: int = 50, account_id: int = None):
     """Get fee log — only buy/sell entries (paginated). account_id is optional."""
     aid = account_id if account_id is not None else _require_account_id()
-    raw = _get(f"/accounts/{aid}/balance-log", {"page": page, "limit": min(limit, 200)})
+    raw = _get(f"/accounts/{aid}/balance-log", {"page": page, "limit": min(limit, 200)}, sim=True)
     if raw.get("success") and raw["data"].get("data"):
         items = raw["data"]["data"].get("items", [])
         raw["data"]["items"] = [x for x in items if x.get("reason") in ("buy", "sell")]
@@ -281,7 +291,7 @@ def get_fee_log(page: int = 1, limit: int = 50, account_id: int = None):
 
 
 def get_rules():
-    return _get("/rules")
+    return _get(f"/rules/{MARKET}", sim=True)
 
 
 # ═══════════ CLI ═══════════

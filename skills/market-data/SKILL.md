@@ -17,7 +17,7 @@ Base URL: `https://fin-meta.net/api/v1`. `{market}` = `ashare` | `usstock` | `hk
 
 ## Symbols (list / search)
 
-Returns all stocks; supports optional `keyword` filter and `limit` (max 10000).
+Returns up to `limit` stocks (default 100, max 10000); supports optional `keyword` filter.
 
 ```bash
 # A-Share

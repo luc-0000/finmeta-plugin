@@ -126,7 +126,7 @@ python ashare/api.py --account-id 123
 1. Token: load from `~/.finmeta/access_token`. If missing, invoke `finmeta-plugin` setup skill.
 2. For A-Share: read account_id from `~/.finmeta/config.json` (`accounts.ashare`).
 3. If A-Share account_id is missing (but token is set):
-   - List accounts: `curl -H "Authorization: Bearer $FINMETA_ACCESS_TOKEN" https://fin-meta.net/api/v1/ashare/accounts?lightweight=true`
+   - List accounts: `curl -H "Authorization: Bearer $FINMETA_ACCESS_TOKEN" https://fin-meta.net/api/v1/simulation/accounts?lightweight=true&market=ashare`
    - Present the list: *"Here are your accounts: (1) Account #123 — A-Share. Which one?"*
    - Save with: `python ashare/api.py --account-id <id>` (writes to `~/.finmeta/config.json`)
 4. Crypto and US Stock do not need account_id — they auto-resolve from your user.

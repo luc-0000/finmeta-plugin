@@ -29,7 +29,7 @@ Pick the agent you want, then call it.
 ## Step 2: Call
 
 ```bash
-curl -X POST "$FC_INVOKE_URL" \
+curl --max-time 600 -X POST "$FC_INVOKE_URL" \
   -H "Authorization: Bearer $FINMETA_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '<JSON matching the agent input_schema>'
@@ -44,3 +44,12 @@ curl -X POST "$FC_INVOKE_URL" \
 - Insufficient credits → HTTP 402.
 - For Task Agents (trading / deep-research / strategy / ...), use `finmeta-task-agent` (A2A), not this.
 - All discovery and invoke calls target **cloud** (`https://fin-meta.net`), not localhost.
+
+## Timeouts
+
+The invoke is a **synchronous LLM call — taking several minutes is normal**. A cut-off call almost always means some timeout layer fired, not that the agent is broken. Two layers can cut it, with different fixes:
+
+1. **The shell/tool running curl (most common).** Many agent Bash tools default to ~120s and kill curl long before its own 600s limit. Symptom: the command is killed with no curl exit code and no JSON output. Fix: re-run with the tool timeout raised to ≥ 600s, or run the curl in the background and read the output file when it finishes.
+2. **curl itself (`--max-time 600`).** curl exits with **code 28** — the agent genuinely ran past 10 minutes. The server may still finish that call (and bill it), so check with the user before blindly retrying — a retry may charge twice.
+
+Step 1 (list agents) is a quick metadata call — a short timeout there is fine.

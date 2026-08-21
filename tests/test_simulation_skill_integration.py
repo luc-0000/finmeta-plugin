@@ -14,6 +14,7 @@ FINTOOLS_API_BASE / FINMETA_ACCESS_TOKEN / FINTOOLS_SIMULATION_ACCOUNT_ID，
 
 净零清理：每个 market 建独立测试盘（skill-integration-<market>），
 tearDownClass 统一 DELETE（级联清 positions/orders/balance_log）。
+测试盘生命周期走 canonical /api/v1/simulation/accounts（2026-08-21 路由统一）。
 注意：local 模式 backend 连云 RDS，交易写入云端测试盘后随删盘清理。
 
 交易断言分两档：
@@ -73,7 +74,7 @@ class _MarketIntegrationMixin:
     def setUpClass(cls):
         assert cls.MARKET, "子类必须设置 MARKET"
         cls.mod = _load_skill_module(cls.MARKET)
-        resp = _api("POST", f"/api/v1/{cls.MARKET}/accounts",
+        resp = _api("POST", "/api/v1/simulation/accounts",
                     {"market": cls.MARKET, "name": f"skill-integration-{cls.MARKET}"})
         cls.account_id = resp["data"]["id"]
         cls._orig_account_env = os.environ.get("FINTOOLS_SIMULATION_ACCOUNT_ID")
@@ -82,7 +83,7 @@ class _MarketIntegrationMixin:
     @classmethod
     def tearDownClass(cls):
         if cls.account_id:
-            _api("DELETE", f"/api/v1/{cls.MARKET}/accounts/{cls.account_id}")
+            _api("DELETE", f"/api/v1/simulation/accounts/{cls.account_id}")
         if cls._orig_account_env is None:
             os.environ.pop("FINTOOLS_SIMULATION_ACCOUNT_ID", None)
         else:

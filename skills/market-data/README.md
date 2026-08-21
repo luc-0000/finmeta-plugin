@@ -8,7 +8,7 @@ HK Stock covers **142 competition symbols only** (from the hk.ai competition lis
 
 ```bash
 curl -H "Authorization: Bearer $FINMETA_ACCESS_TOKEN" \
-  "https://fin-meta.net/api/v1/public/markets/hkstock/symbols"
+  "https://fin-meta.net/api/v1/public/markets/hkstock/symbols?limit=200"
 ```
 
 ### Most-traded symbols (a subset, for reference)

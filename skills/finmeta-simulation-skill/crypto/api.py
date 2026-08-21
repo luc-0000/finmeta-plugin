@@ -21,7 +21,8 @@ TOKEN_FILE = Path.home() / ".finmeta" / "access_token"  # SSOT for access token
 ACCOUNTS_FILE = Path.home() / ".finmeta" / "config.json"  # SSOT for account_ids
 MARKET = "crypto"  # this module's key under accounts.*
 API_BASE = os.getenv("FINTOOLS_API_BASE", "https://fin-meta.net")
-API_PREFIX = "/api/v1/crypto"
+MARKET_DATA_PREFIX = "/api/v1/crypto"  # 行情（市场 router，与模拟盘无关）
+SIM_PREFIX = "/api/v1/simulation"     # 模拟盘 canonical（2026-08-21 路由统一）
 
 
 def _ensure_requests():
@@ -117,12 +118,18 @@ def _headers():
 
 
 def _url(path: str) -> str:
-    return f"{API_BASE}{API_PREFIX}{path}"
+    return f"{API_BASE}{MARKET_DATA_PREFIX}{path}"
 
 
-def _get(path, params=None):
+def _sim_url(path: str) -> str:
+    """模拟盘 canonical 路径：/api/v1/simulation/*。"""
+    return f"{API_BASE}{SIM_PREFIX}{path}"
+
+
+def _get(path, params=None, sim: bool = False):
     try:
-        r = requests.get(_url(path), headers=_headers(), params=params, timeout=60)
+        r = requests.get(_sim_url(path) if sim else _url(path),
+                         headers=_headers(), params=params, timeout=60)
         r.raise_for_status()
         return {"success": True, "data": r.json()}
     except requests.exceptions.RequestException as e:
@@ -130,8 +137,9 @@ def _get(path, params=None):
 
 
 def _post(path, body=None):
+    """POST（模拟盘专用，path 为 /api/v1/simulation 下的完整段）。"""
     try:
-        r = requests.post(_url(path), headers=_headers(), json=body or {}, timeout=60)
+        r = requests.post(_sim_url(path), headers=_headers(), json=body or {}, timeout=60)
         r.raise_for_status()
         return {"success": True, "data": r.json()}
     except requests.exceptions.RequestException as e:
@@ -194,17 +202,28 @@ def get_kline(symbol: str, limit: int = 100):
 # === Account (requires account_id) ===
 
 def _pick_account_id():
-    """Resolve account_id: env/config override → personal account from GET /accounts."""
+    """Resolve account_id: env/config override → personal account from GET /simulation/accounts."""
     aid = _require_account_id()
     if aid:
         return aid
-    resp = _get("/accounts")
+    resp = _get("/accounts", {"market": MARKET}, sim=True)
     if not resp.get("success"):
         return None
     accounts = resp.get("data", {}).get("data", {}).get("accounts", [])
     personal = next((a for a in accounts if a.get("competition_id") is None), None)
     acc = personal or (accounts[0] if accounts else None)
     return acc.get("id") if acc else None
+
+
+def _ensure_account_id():
+    """下单用：env/config → 名下盘 → 都没有则新建一个（对齐旧自动建盘行为）。"""
+    aid = _pick_account_id()
+    if aid:
+        return aid
+    resp = _post("/accounts", {"market": MARKET})
+    if resp.get("success"):
+        return resp["data"]["data"]["id"]
+    return None
 
 
 def get_account(account_id: int = None):
@@ -217,8 +236,8 @@ def get_account(account_id: int = None):
     _require_token()
     aid = account_id if account_id is not None else _require_account_id()
     if aid:
-        return _get(f"/accounts/{aid}")
-    return _get("/accounts")
+        return _get(f"/accounts/{aid}", sim=True)
+    return _get("/accounts", {"market": MARKET}, sim=True)
 
 
 # === Trading (requires account_id) ===
@@ -229,14 +248,15 @@ def buy(symbol: str, quantity: float, account_id: int = None):
     Args:
         symbol: trading pair, e.g. BTC/USDT
         quantity: amount in base currency, e.g. 0.01 BTC
-        account_id: optional — reads from FINTOOLS_SIMULATION_ACCOUNT_ID env var if omitted.
+        account_id: optional — reads from FINTOOLS_SIMULATION_ACCOUNT_ID env var if omitted;
+            名下没有盘时自动新建一个（对齐旧行为）。
     """
     _require_token()
-    aid = account_id if account_id is not None else _require_account_id()
-    body = {"symbol": symbol, "quantity": quantity}
-    if aid:
-        body["account_id"] = aid
-    return _post("/orders/buy", body)
+    aid = account_id if account_id is not None else _ensure_account_id()
+    if not aid:
+        return {"success": False, "error": "No accounts available and auto-create failed"}
+    return _post(f"/{MARKET}/accounts/{aid}/orders/buy",
+                 {"stock_code": symbol, "quantity": quantity})
 
 
 def sell(symbol: str, quantity: float, account_id: int = None):
@@ -245,21 +265,22 @@ def sell(symbol: str, quantity: float, account_id: int = None):
     Args:
         symbol: trading pair, e.g. BTC/USDT
         quantity: amount in base currency, e.g. 0.01 BTC
-        account_id: optional — reads from FINTOOLS_SIMULATION_ACCOUNT_ID env var if omitted.
+        account_id: optional — reads from FINTOOLS_SIMULATION_ACCOUNT_ID env var if omitted;
+            名下没有盘时自动新建一个（对齐旧行为）。
     """
     _require_token()
-    aid = account_id if account_id is not None else _require_account_id()
-    body = {"symbol": symbol, "quantity": quantity}
-    if aid:
-        body["account_id"] = aid
-    return _post("/orders/sell", body)
+    aid = account_id if account_id is not None else _ensure_account_id()
+    if not aid:
+        return {"success": False, "error": "No accounts available and auto-create failed"}
+    return _post(f"/{MARKET}/accounts/{aid}/orders/sell",
+                 {"stock_code": symbol, "quantity": quantity})
 
 
 # === Rules (no auth) ===
 
 def get_rules():
     """Get crypto trading rules (min order size, commission, etc.)."""
-    return _get("/rules")
+    return _get(f"/rules/{MARKET}", sim=True)
 
 
 # === History (requires account_id) ===
@@ -274,7 +295,7 @@ def get_positions(account_id: int = None):
     aid = account_id if account_id is not None else _pick_account_id()
     if not aid:
         return {"success": False, "error": "No accounts found — place a trade first (auto-creates one)"}
-    return _get(f"/accounts/{aid}/positions")
+    return _get(f"/accounts/{aid}/positions", sim=True)
 
 
 def get_orders(limit: int = 20, account_id: int = None):
@@ -288,7 +309,7 @@ def get_orders(limit: int = 20, account_id: int = None):
     aid = account_id if account_id is not None else _pick_account_id()
     if not aid:
         return {"success": False, "error": "No accounts found — place a trade first (auto-creates one)"}
-    return _get(f"/accounts/{aid}/orders", {"limit": min(limit, 200)})
+    return _get(f"/accounts/{aid}/orders", {"limit": min(limit, 200)}, sim=True)
 
 
 def get_balance_log(page: int = 1, limit: int = 50, account_id: int = None):
@@ -303,7 +324,7 @@ def get_balance_log(page: int = 1, limit: int = 50, account_id: int = None):
     aid = account_id if account_id is not None else _pick_account_id()
     if not aid:
         return {"success": False, "error": "No accounts found — place a trade first (auto-creates one)"}
-    return _get(f"/accounts/{aid}/balance-log", {"page": page, "limit": min(limit, 200)})
+    return _get(f"/accounts/{aid}/balance-log", {"page": page, "limit": min(limit, 200)}, sim=True)
 
 
 # ═══════════ CLI ═══════════
