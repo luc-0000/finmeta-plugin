@@ -47,6 +47,7 @@ python ashare/api.py --account-id 123
 - All four markets **auto-resolve** your personal account — no account_id needed
 - Placing a trade with no account under this token **auto-creates** one and saves it to config
 - No account yet and want one? Create explicitly: `python <market>/api.py --action create_account` (id saved to config automatically; optional `--name "..."`)
+- Delete a sim: `python <market>/api.py --action delete_account --account-id <id>` — explicit id required, never auto-picks; clears the config pin if it pointed at the deleted id
 - A saved account_id is **ownership-checked** per call: if it belongs to another token's user
   (leftover after switching tokens), it is cleared automatically and your own account is used —
   switching tokens never deadlocks a market
@@ -63,6 +64,7 @@ python ashare/api.py --account-id 123
 | K-line | `--action kline --symbol 600519.SH` |
 | Account | `--action account` |
 | Create account | `--action create_account` (optional `--name "..."`) |
+| Delete account | `--action delete_account --account-id <id>` (clears the config pin if it pointed there) |
 | Positions | `--action positions` |
 | Buy | `--action buy --symbol 600519.SH --quantity 100` |
 | Sell | `--action sell --symbol 600519.SH --quantity 100` |
@@ -84,9 +86,14 @@ python ashare/api.py --account-id 123
 | K-line | `--action kline --symbol BTC/USDT` |
 | Account | `--action account` |
 | Create account | `--action create_account` (optional `--name "..."`) |
+| Delete account | `--action delete_account --account-id <id>` (clears the config pin if it pointed there) |
 | Positions | `--action positions` |
 | Buy | `--action buy --symbol BTC/USDT --quantity 0.01` |
 | Sell | `--action sell --symbol BTC/USDT --quantity 0.01` |
+| Conditional buy | `--action conditional_buy --symbol BTC/USDT --quantity 0.5 --trigger-dir le --trigger-price 49000` |
+| Conditional sell | `--action conditional_sell --symbol BTC/USDT --quantity 0.5 --trigger-dir ge --trigger-price 52000` |
+| Conditional orders | `--action conditional_orders --status pending` |
+| Cancel conditional | `--action conditional_cancel --order-id 6` |
 | Orders | `--action orders` |
 | Balance log | `--action balance_log` |
 | Rules | `--action rules` |
@@ -100,20 +107,25 @@ python ashare/api.py --account-id 123
 | K-line | `--action kline --symbol AAPL` |
 | Account | `--action account` |
 | Create account | `--action create_account` (optional `--name "..."`) |
+| Delete account | `--action delete_account --account-id <id>` (clears the config pin if it pointed there) |
 | Positions | `--action positions` |
 | Buy | `--action buy --symbol AAPL --quantity 10` |
 | Sell | `--action sell --symbol AAPL --quantity 10` |
+| Conditional buy | `--action conditional_buy --symbol AAPL --quantity 10 --trigger-dir le --trigger-price 185` |
+| Conditional sell | `--action conditional_sell --symbol AAPL --quantity 10 --trigger-dir ge --trigger-price 210` |
+| Conditional orders | `--action conditional_orders --status pending` |
+| Cancel conditional | `--action conditional_cancel --order-id 6` |
 | Orders | `--action orders` |
 | Balance log | `--action balance_log` |
 | Rules | `--action rules` |
 
 **US Stock notes**: T+0, lot_size=1 (integer shares), zero commission, no daily limit. Quantity negative = USD amount (resolves to floor(USD/price) shares). Universe = S&P 500.
 
-### Conditional Orders (A-Share only, v1)
+### Conditional Orders (all four markets, one engine)
 
-Trigger engine reads 5-minute bars from the platform database (no external quote API) and ticks every 30s during auction hours. Fills happen at the triggering bar's closing price — a cross may take up to ~5 minutes to fire.
-`--trigger-dir le` = fire when the bar's low ≤ trigger (typical for buy-the-dip); `ge` = fire when the bar's high ≥ trigger (typical for take-profit sell). `--expiry day` voids at 15:00 same day (rejected off-hours); `gtc` stays until cancelled/filled.
-If the latest bar has already crossed when you place, the order fires immediately (response may come back `filled`/`rejected`).
+Same conditional-order engine for all markets; market differences are data (bar cadence, trading hours, day-close time). Trigger engine reads each market's bars from the platform database (no external quote API) and ticks every 30s. Fills happen at the triggering bar's closing price — how long a cross takes to fire depends on the market's bar cadence (~5 min for A-Share 5m bars, ~1-2 min for HK 1Min / crypto 1m bars).
+`--trigger-dir le` = fire when the bar's low ≤ trigger (typical for buy-the-dip); `ge` = fire when the bar's high ≥ trigger (typical for take-profit sell). `--expiry day` voids at the market's close (A-Share 15:00 / US 16:00 ET / HK 16:00 HKT; rejected off-hours) and is auto-converted to `gtc` on crypto (24/7, no daily close); `gtc` stays until cancelled/filled.
+If the latest bar has already crossed when you place (during trading hours), the order fires immediately (response may come back `filled`/`rejected`).
 Pass `--client-order-id <key>` for idempotency — retries with the same key return the original order, never duplicate.
 
 ### HK Stock (`hkstock/api.py`)
@@ -125,9 +137,14 @@ Pass `--client-order-id <key>` for idempotency — retries with the same key ret
 | K-line | `--action kline --symbol 00700.HK --period 1d` |
 | Account | `--action account` |
 | Create account | `--action create_account` (optional `--name "..."`) |
+| Delete account | `--action delete_account --account-id <id>` (clears the config pin if it pointed there) |
 | Positions | `--action positions` |
 | Buy | `--action buy --symbol 00700.HK --quantity 10` |
 | Sell | `--action sell --symbol 00700.HK --quantity 10` |
+| Conditional buy | `--action conditional_buy --symbol 00700.HK --quantity 100 --trigger-dir le --trigger-price 290` |
+| Conditional sell | `--action conditional_sell --symbol 00700.HK --quantity 100 --trigger-dir ge --trigger-price 330` |
+| Conditional orders | `--action conditional_orders --status pending` |
+| Cancel conditional | `--action conditional_cancel --order-id 6` |
 | Orders | `--action orders` |
 | Balance log | `--action balance_log` |
 | Rules | `--action rules` |
@@ -180,6 +197,12 @@ result = ashare_buy("600519.SH", 100)
 result = ashare_place_conditional("600519.SH", "buy", 100,
                                   trigger_dir="le", trigger_price=1500, expiry="gtc",
                                   client_order_id="my-task-001")
+
+# Crypto conditional order (day is auto-converted to gtc — 24/7 market)
+from finmeta_simulation_skill.crypto import place_conditional as crypto_place_conditional
+result = crypto_place_conditional("BTC/USDT", "buy", 0.5,
+                                  trigger_dir="le", trigger_price=49000,
+                                  client_order_id="my-task-002")
 
 # Crypto
 result = crypto_buy("BTC/USDT", 0.01)

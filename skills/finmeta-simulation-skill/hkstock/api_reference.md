@@ -16,11 +16,24 @@ Base: `https://fin-meta.net/api/v1/hkstock`
 | Action | HTTP | Path | Body |
 |--------|------|------|------|
 | create_account | POST | /simulation/accounts | {market: hkstock, name?} — new id saved to config |
+| delete_account | DELETE | /simulation/accounts/{id} | 204; explicit id required, config pin cleared if it pointed there |
 | account (list) | GET | /accounts | — |
 | account (detail) | GET | /accounts/{id} | — |
 | positions | GET | /accounts/{id}/positions | — |
 | buy | POST | /orders/buy | {symbol, quantity, account_id?} |
 | sell | POST | /orders/sell | {symbol, quantity, account_id?} |
+
+## Conditional Orders (Bearer Token required)
+
+One engine for all four markets; HK fills at the triggering 1Min bar's close, ticks every 30s during HKT trading hours.
+
+| Action | HTTP | Path | Body / Query |
+|--------|------|------|------|
+| conditional_buy / conditional_sell | POST | /simulation/hkstock/accounts/{id}/orders/conditional | {stock_code, side, quantity (board lot 10), trigger_dir: le\|ge, trigger_price, expiry: day\|gtc, client_order_id?, source?} |
+| conditional_orders | GET | /simulation/accounts/{id}/orders/conditional | ?status=pending|filled|rejected|expired|cancelled&limit= |
+| conditional_cancel | DELETE | /simulation/accounts/{id}/orders/conditional/{order_id} | 204; non-pending → 409 |
+
+`expiry: "day"` voids at 16:00 HKT same day (only accepted during trading hours). `client_order_id` is the idempotency key — retries return the original order. If the latest bar already crossed at placement (during trading hours), the order fires immediately (response may be `filled`/`rejected`).
 
 ## History (Bearer Token required)
 

@@ -134,6 +134,16 @@ def _post(path, body=None):
         return _handle_error(e)
 
 
+def _delete(path):
+    """DELETE（模拟盘专用，204 无 body）。"""
+    try:
+        r = requests.delete(_sim_url(path), headers=_headers(), timeout=60)
+        r.raise_for_status()
+        return {"success": True, "data": None}
+    except requests.exceptions.RequestException as e:
+        return _handle_error(e)
+
+
 def _handle_error(e):
     resp = getattr(e, "response", None)
     if resp is not None:
@@ -267,6 +277,22 @@ def create_account(name: str = None):
     return resp
 
 
+def delete_account(account_id: int):
+    """Delete a simulation account (explicit id required — never auto-picks).
+
+    DELETE /simulation/accounts/{id} — owner-checked server side (404 if not yours).
+    Clears the config pin (accounts.<MARKET>) when it pointed at the deleted id.
+    """
+    if account_id is None:
+        return {"success": False,
+                "error": "account_id required: "
+                         f"python {MARKET}/api.py --action delete_account --account-id <id>"}
+    resp = _delete(f"/accounts/{account_id}")
+    if resp.get("success") and _load_account_id() == account_id:
+        _clear_account_id()
+    return resp
+
+
 def get_account(account_id: int = None):
     """Get account overview (balance, market value, P/L).
 
@@ -370,6 +396,71 @@ def get_balance_log(page: int = 1, limit: int = 50, account_id: int = None):
 
 # ═══════════ CLI ═══════════
 
+# === Conditional Orders (four markets share one engine; crypto reads 1m bars from
+# === the platform DB, ticks every 30s around the clock; fills at the bar's close) ===
+
+def place_conditional(stock_code: str, side: str, quantity: float,
+                      trigger_dir: str, trigger_price, expiry: str = "day",
+                      account_id: int = None, client_order_id: str = None):
+    """Place a conditional order (triggers when a 1m bar crosses, then matched by existing rules).
+
+    Args:
+        stock_code: e.g. BTC/USDT
+        side: "buy" | "sell"
+        quantity: base-asset amount, lot step 0.0001 (fractional OK, e.g. 0.5).
+        trigger_dir: "le" (fire when the bar's low <= trigger_price) | "ge" (fire when the
+            bar's high >= trigger_price). Fill price = the bar's close.
+        trigger_price: trigger price.
+        expiry: crypto trades 24/7 with no daily close, so "day" is automatically
+            converted to "gtc" (response data.expiry_coerced shows this); "gtc" as-is.
+        account_id: optional — auto-resolves if omitted; auto-creates an account when you have none.
+        client_order_id: optional idempotency key — retrying with the same value returns the
+            original order instead of placing a duplicate (strongly recommended for agents).
+
+    Note: prices come from database-stored 1m bars, so a cross may take up to ~1 minute
+    to fire. If the latest bar has already crossed at placement time, the order fires
+    immediately and the response status may be "filled"/"rejected" right away.
+    """
+    aid = account_id if account_id is not None else _ensure_account_id()
+    if not aid:
+        return _no_account_error(trade=True)
+    body = {"stock_code": stock_code, "side": side, "quantity": quantity,
+            "trigger_dir": trigger_dir, "trigger_price": trigger_price, "expiry": expiry}
+    if client_order_id:
+        body["client_order_id"] = client_order_id
+    return _post(f"/{MARKET}/accounts/{aid}/orders/conditional", body)
+
+
+def get_conditional_orders(status: str = None, limit: int = 50, account_id: int = None):
+    """List conditional orders (newest first).
+
+    Args:
+        status: optional filter — pending | filled | rejected | expired | cancelled.
+        limit: max results (default 50, max 200).
+        account_id: optional — auto-resolves your personal account if omitted.
+    """
+    aid = account_id if account_id is not None else _pick_account_id()
+    if not aid:
+        return _no_account_error()
+    params = {"limit": min(limit, 200)}
+    if status:
+        params["status"] = status
+    return _get(f"/accounts/{aid}/orders/conditional", params, sim=True)
+
+
+def cancel_conditional(order_id: int, account_id: int = None):
+    """Cancel a pending conditional order (idempotent per CAS; non-pending → 409, missing → 404).
+
+    Args:
+        order_id: conditional order id (from place_conditional / get_conditional_orders).
+        account_id: optional — auto-resolves your personal account if omitted.
+    """
+    aid = account_id if account_id is not None else _pick_account_id()
+    if not aid:
+        return _no_account_error()
+    return _delete(f"/accounts/{aid}/orders/conditional/{order_id}")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Crypto simulation trading CLI")
     parser.add_argument("--action", required=False, default="")
@@ -377,7 +468,17 @@ def main():
     parser.add_argument("--symbols")
     parser.add_argument("--quantity", type=float)
     parser.add_argument("--limit", type=int, default=100)
+    parser.add_argument("--trigger-dir", choices=["le", "ge"],
+                        help="conditional: le = fire when bar low <= trigger; ge = fire when bar high >= trigger (fill = bar close)")
+    parser.add_argument("--trigger-price", type=float)
+    parser.add_argument("--expiry", choices=["day", "gtc"], default="day",
+                        help="crypto: day is auto-converted to gtc (24/7 market, no daily close)")
+    parser.add_argument("--order-id", type=int)
+    parser.add_argument("--client-order-id")
+    parser.add_argument("--status", choices=["pending", "filled", "rejected", "expired", "cancelled"],
+                        help="conditional_orders: filter by status")
     parser.add_argument("--token", help="Save API token to ~/.finmeta/config.json")
+    parser.add_argument("--account-id", type=int, help="Simulation account id (delete_account target)")
     parser.add_argument("--name", help="Optional account display name (create_account)")
     args = parser.parse_args()
 
@@ -392,7 +493,9 @@ def main():
         sys.exit(0)
 
     AUTH_ACTIONS = {"account", "buy", "sell", "orders", "positions", "balance_log",
-                    "create_account"}
+                    "conditional_buy", "conditional_sell",
+                    "conditional_orders", "conditional_cancel",
+                    "create_account", "delete_account"}
 
     if args.action in AUTH_ACTIONS:
         _require_token()
@@ -405,6 +508,8 @@ def main():
         result = get_kline(args.symbol, args.limit) if args.symbol else {"success": False, "error": "missing --symbol"}
     elif args.action == "create_account":
         result = create_account(args.name)
+    elif args.action == "delete_account":
+        result = delete_account(args.account_id)
     elif args.action == "account":
         result = get_account()
     elif args.action == "positions":
@@ -413,6 +518,19 @@ def main():
         result = buy(args.symbol, args.quantity) if args.symbol and args.quantity else {"success": False, "error": "missing --symbol or --quantity"}
     elif args.action == "sell":
         result = sell(args.symbol, args.quantity) if args.symbol and args.quantity else {"success": False, "error": "missing --symbol or --quantity"}
+    elif args.action in ("conditional_buy", "conditional_sell"):
+        if not (args.symbol and args.quantity and args.trigger_price and args.trigger_dir):
+            result = {"success": False,
+                      "error": "missing --symbol / --quantity / --trigger-dir / --trigger-price"}
+        else:
+            result = place_conditional(args.symbol, "buy" if args.action == "conditional_buy" else "sell",
+                                       args.quantity, args.trigger_dir, args.trigger_price,
+                                       args.expiry, client_order_id=args.client_order_id)
+    elif args.action == "conditional_orders":
+        result = get_conditional_orders(status=args.status, limit=args.limit)
+    elif args.action == "conditional_cancel":
+        result = (cancel_conditional(args.order_id) if args.order_id
+                  else {"success": False, "error": "missing --order-id"})
     elif args.action == "orders":
         result = get_orders(args.limit)
     elif args.action == "balance_log":

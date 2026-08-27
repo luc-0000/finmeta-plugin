@@ -21,6 +21,7 @@ No account yet? `--action create_account` creates one and saves it to config.
 |--------|------|------|
 | account | GET | /accounts/{account_id} |
 | create_account | POST | /simulation/accounts body {market: ashare, name?} — new id saved to config |
+| delete_account | DELETE | /simulation/accounts/{id} — 204; explicit id required, config pin cleared if it pointed there |
 | positions | GET | /accounts/{account_id}/positions |
 | list_my_accounts | GET | /accounts?lightweight=true |
 
@@ -31,7 +32,7 @@ No account yet? `--action create_account` creates one and saves it to config.
 | buy | POST | /accounts/{account_id}/orders/buy | {stock_code, quantity} |
 | sell | POST | /accounts/{account_id}/orders/sell | {stock_code, quantity} |
 
-## Conditional Orders (Bearer Token required, v1 ashare only)
+## Conditional Orders (Bearer Token required)
 
 Trigger engine reads 5-minute bars from the platform database (no external quote API) and
 ticks every 30s during auction hours. Fills happen at the triggering bar's closing price,

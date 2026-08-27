@@ -219,5 +219,86 @@ class CreateAccountUnitTests(unittest.TestCase):
                 mock_create.assert_called_once_with()
 
 
+class DeleteAccountUnitTests(unittest.TestCase):
+    """delete_account 显式删盘（2026-08-27）：DELETE /simulation/accounts/{id}。
+
+    覆盖四市场统一行为：
+    - 成功且删的是钉住盘 → config 钉清除
+    - 成功但删的是别的盘 → config 钉不动
+    - 失败 → config 不动
+    - 不传 id → success=False（绝不自动挑盘）
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.cfg_path = Path(self._tmp.name) / "config.json"
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _mod(self, market, pinned=None):
+        mod = _load(market)
+        mod.ACCOUNTS_FILE = self.cfg_path
+        cfg = {"access_token": "unit-test-token"}
+        if pinned is not None:
+            cfg["accounts"] = {market: pinned}
+        self.cfg_path.write_text(json.dumps(cfg))
+        return mod
+
+    def test_delete_pinned_clears_config(self):
+        """删的正是 config 钉住的盘 → 钉清除。"""
+        for market in MARKETS:
+            with self.subTest(market=market):
+                mod = self._mod(market, pinned=888)
+                with patch.object(mod, "_delete",
+                                  return_value={"success": True, "data": None}) as mock_del, \
+                     patch.dict(os.environ):
+                    os.environ.pop("FINTOOLS_SIMULATION_ACCOUNT_ID", None)
+                    result = mod.delete_account(888)
+                self.assertTrue(result.get("success"), market)
+                self.assertEqual(mock_del.call_args[0][0], "/accounts/888", market)
+                cfg = json.loads(self.cfg_path.read_text())
+                self.assertNotIn(market, cfg.get("accounts", {}),
+                                 f"{market}: 删钉住盘后 config 钉必须清除")
+
+    def test_delete_other_keeps_pin(self):
+        """删的是别的盘 → config 钉不动。"""
+        for market in MARKETS:
+            with self.subTest(market=market):
+                mod = self._mod(market, pinned=889)
+                with patch.object(mod, "_delete",
+                                  return_value={"success": True, "data": None}), \
+                     patch.dict(os.environ):
+                    os.environ.pop("FINTOOLS_SIMULATION_ACCOUNT_ID", None)
+                    mod.delete_account(777)
+                cfg = json.loads(self.cfg_path.read_text())
+                self.assertEqual(cfg["accounts"][market], 889, market)
+
+    def test_delete_failure_keeps_config(self):
+        """删盘失败（404/网络）→ config 不动。"""
+        for market in MARKETS:
+            with self.subTest(market=market):
+                mod = self._mod(market, pinned=888)
+                with patch.object(mod, "_delete",
+                                  return_value={"success": False, "error": "HTTP 404"}), \
+                     patch.dict(os.environ):
+                    os.environ.pop("FINTOOLS_SIMULATION_ACCOUNT_ID", None)
+                    result = mod.delete_account(888)
+                self.assertFalse(result.get("success"), market)
+                cfg = json.loads(self.cfg_path.read_text())
+                self.assertEqual(cfg["accounts"][market], 888, market)
+
+    def test_delete_requires_explicit_id(self):
+        """不传 id → 拒绝（绝不自动挑盘，防误删）。"""
+        for market in MARKETS:
+            with self.subTest(market=market):
+                mod = self._mod(market, pinned=888)
+                with patch.object(mod, "_delete") as mock_del:
+                    result = mod.delete_account(None)
+                self.assertFalse(result.get("success"), market)
+                self.assertIn("--account-id", result.get("error", ""), market)
+                mock_del.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

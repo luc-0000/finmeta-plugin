@@ -268,6 +268,22 @@ def create_account(name: str = None):
     return resp
 
 
+def delete_account(account_id: int):
+    """Delete a simulation account (explicit id required — never auto-picks).
+
+    DELETE /simulation/accounts/{id} — owner-checked server side (404 if not yours).
+    Clears the config pin (accounts.<MARKET>) when it pointed at the deleted id.
+    """
+    if account_id is None:
+        return {"success": False,
+                "error": "account_id required: "
+                         f"python {MARKET}/api.py --action delete_account --account-id <id>"}
+    resp = _delete(f"/accounts/{account_id}")
+    if resp.get("success") and _load_account_id() == account_id:
+        _clear_account_id()
+    return resp
+
+
 def get_account(account_id: int = None):
     """Get account overview (balance, market value, P/L).
 
@@ -324,25 +340,28 @@ def sell(stock_code: str, quantity: int, account_id: int = None):
                  {"stock_code": stock_code, "quantity": quantity})
 
 
-# === Conditional Orders (v1 ashare only; engine triggers on 30s tick) ===
+# === Conditional Orders (all four markets share one engine; ashare reads 5m bars from
+# === the platform DB, ticks every 30s during auction hours; fills at the bar's close) ===
 
 def place_conditional(stock_code: str, side: str, quantity: int,
                       trigger_dir: str, trigger_price, expiry: str = "day",
                       account_id: int = None, client_order_id: str = None):
-    """Place a conditional order (trigger when price crosses, then matched by existing rules).
+    """Place a conditional order (triggers when a 5-minute bar crosses, then matched by existing rules).
 
     Args:
         stock_code: e.g. 600519.SH
         side: "buy" | "sell"
         quantity: number of shares, must be a lot multiple (100).
-        trigger_dir: "le" (fire when price <= trigger_price) | "ge" (fire when price >= trigger_price).
+        trigger_dir: "le" (fire when the bar's low <= trigger_price) | "ge" (fire when the
+            bar's high >= trigger_price). Fill price = the bar's close.
         trigger_price: trigger price.
         expiry: "day" (void after 15:00 same day) | "gtc" (good-till-cancelled). Default "day".
         account_id: optional — auto-resolves if omitted; auto-creates an account when you have none.
         client_order_id: optional idempotency key — retrying with the same value returns the
             original order instead of placing a duplicate (strongly recommended for agents).
 
-    Note: if the current price has already crossed at placement time, the order fires
+    Note: prices come from database-stored 5m bars, so a cross may take up to ~5 minutes
+    to fire. If the latest bar has already crossed at placement time, the order fires
     immediately and the response status may be "filled"/"rejected" right away.
     """
     aid = account_id if account_id is not None else _ensure_account_id()
@@ -453,7 +472,7 @@ def main():
     parser.add_argument("--limit", type=int, default=60)
     parser.add_argument("--page", type=int, default=1)
     parser.add_argument("--trigger-dir", choices=["le", "ge"],
-                        help="conditional: le = fire when price <= trigger; ge = fire when price >= trigger")
+                        help="conditional: le = fire when bar low <= trigger; ge = fire when bar high >= trigger (fill = bar close)")
     parser.add_argument("--trigger-price", type=float)
     parser.add_argument("--expiry", choices=["day", "gtc"], default="day")
     parser.add_argument("--order-id", type=int)
@@ -469,7 +488,7 @@ def main():
         if args.token:
             _save_token(args.token)
             print("Token saved to", ACCOUNTS_FILE)
-        if args.account_id:
+        if args.account_id and args.action != "delete_account":
             _save_account_id(args.account_id)
             print(f"Account ID {args.account_id} saved to {ACCOUNTS_FILE} (accounts.{MARKET})")
         if not args.action:
@@ -483,7 +502,7 @@ def main():
                     "buy_orders", "sell_orders", "balance_log", "fee_log",
                     "conditional_buy", "conditional_sell",
                     "conditional_orders", "conditional_cancel",
-                    "create_account"}
+                    "create_account", "delete_account"}
 
     if args.action in AUTH_ACTIONS:
         _require_token()
@@ -498,6 +517,8 @@ def main():
         result = get_kline(code, args.period, args.limit) if code else {"success": False, "error": "missing --symbol"}
     elif args.action == "create_account":
         result = create_account(args.name)
+    elif args.action == "delete_account":
+        result = delete_account(args.account_id)
     elif args.action == "account":
         result = get_account()
     elif args.action == "positions":
