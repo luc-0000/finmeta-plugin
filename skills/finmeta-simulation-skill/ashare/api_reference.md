@@ -29,6 +29,23 @@ auto-create on trade). Pass one explicitly only to override.
 | buy | POST | /accounts/{account_id}/orders/buy | {stock_code, quantity} |
 | sell | POST | /accounts/{account_id}/orders/sell | {stock_code, quantity} |
 
+## Conditional Orders (Bearer Token required, v1 ashare only)
+
+Trigger engine reads 5-minute bars from the platform database (no external quote API) and
+ticks every 30s during auction hours. Fills happen at the triggering bar's closing price,
+so a cross may take up to ~5 minutes to fire. If the latest bar has already crossed at
+placement time, the order fires immediately — the response status may be `filled`/`rejected` right away.
+
+| Action | HTTP | Path | Body / Query |
+|--------|------|------|--------------|
+| conditional_buy / conditional_sell | POST | /simulation/ashare/accounts/{account_id}/orders/conditional | {stock_code, side: buy\|sell, quantity, trigger_dir: le\|ge, trigger_price, expiry: day\|gtc, client_order_id?} |
+| conditional_orders | GET | /simulation/accounts/{account_id}/orders/conditional | ?status=pending\|filled\|rejected\|expired\|cancelled&limit= |
+| conditional_cancel | DELETE | /simulation/accounts/{account_id}/orders/conditional/{order_id} | 204 ok; 409 non-pending; 404 missing |
+
+- `trigger_dir`: `le` = fire when the bar's low ≤ trigger_price; `ge` = fire when the bar's high ≥ trigger_price (fill = bar close)
+- `expiry`: `day` (void after 15:00 same day, rejected off-hours) | `gtc` (good till cancelled)
+- `client_order_id`: idempotency key — same key returns the original order, never duplicates (recommended for agents)
+
 ## History (Bearer Token required)
 
 | Action | HTTP | Path |

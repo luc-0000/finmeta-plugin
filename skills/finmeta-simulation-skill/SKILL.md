@@ -64,6 +64,10 @@ python ashare/api.py --account-id 123
 | Positions | `--action positions` |
 | Buy | `--action buy --symbol 600519.SH --quantity 100` |
 | Sell | `--action sell --symbol 600519.SH --quantity 100` |
+| Conditional buy | `--action conditional_buy --symbol 600519.SH --quantity 100 --trigger-dir le --trigger-price 1500 --expiry gtc` |
+| Conditional sell | `--action conditional_sell --symbol 600519.SH --quantity 100 --trigger-dir ge --trigger-price 1700` |
+| Conditional orders | `--action conditional_orders --status pending` |
+| Cancel conditional | `--action conditional_cancel --order-id 6` |
 | Orders | `--action orders` |
 | Balance log | `--action balance_log` |
 | Fee log | `--action fee_log` |
@@ -100,6 +104,13 @@ python ashare/api.py --account-id 123
 | Rules | `--action rules` |
 
 **US Stock notes**: T+0, lot_size=1 (integer shares), zero commission, no daily limit. Quantity negative = USD amount (resolves to floor(USD/price) shares). Universe = S&P 500.
+
+### Conditional Orders (A-Share only, v1)
+
+Trigger engine reads 5-minute bars from the platform database (no external quote API) and ticks every 30s during auction hours. Fills happen at the triggering bar's closing price — a cross may take up to ~5 minutes to fire.
+`--trigger-dir le` = fire when the bar's low ≤ trigger (typical for buy-the-dip); `ge` = fire when the bar's high ≥ trigger (typical for take-profit sell). `--expiry day` voids at 15:00 same day (rejected off-hours); `gtc` stays until cancelled/filled.
+If the latest bar has already crossed when you place, the order fires immediately (response may come back `filled`/`rejected`).
+Pass `--client-order-id <key>` for idempotency — retries with the same key return the original order, never duplicate.
 
 ### HK Stock (`hkstock/api.py`)
 
@@ -150,12 +161,18 @@ python crypto/api.py --action buy --symbol BTC/USDT --quantity 0.01
 
 ```python
 from finmeta_simulation_skill.ashare import buy as ashare_buy, get_account as ashare_account
+from finmeta_simulation_skill.ashare import place_conditional as ashare_place_conditional
 from finmeta_simulation_skill.crypto import buy as crypto_buy, get_account as crypto_account
 from finmeta_simulation_skill.usstock import buy as usstock_buy, get_account as usstock_account
 from finmeta_simulation_skill.hkstock import buy as hkstock_buy, get_account as hkstock_account
 
 # A-Share — account_id optional (auto-resolves / auto-creates)
 result = ashare_buy("600519.SH", 100)
+
+# A-Share conditional order (trigger_dir: "le" price<=trigger | "ge" price>=trigger)
+result = ashare_place_conditional("600519.SH", "buy", 100,
+                                  trigger_dir="le", trigger_price=1500, expiry="gtc",
+                                  client_order_id="my-task-001")
 
 # Crypto
 result = crypto_buy("BTC/USDT", 0.01)

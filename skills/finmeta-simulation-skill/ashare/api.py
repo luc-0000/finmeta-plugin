@@ -128,6 +128,16 @@ def _post(path, body=None):
         return _handle_error(e)
 
 
+def _delete(path):
+    """DELETE（模拟盘专用，204 无 body）。"""
+    try:
+        r = requests.delete(_sim_url(path), headers=_headers(), timeout=60)
+        r.raise_for_status()
+        return {"success": True, "data": None}
+    except requests.exceptions.RequestException as e:
+        return _handle_error(e)
+
+
 def _handle_error(e):
     resp = getattr(e, "response", None)
     if resp is not None:
@@ -297,6 +307,67 @@ def sell(stock_code: str, quantity: int, account_id: int = None):
                  {"stock_code": stock_code, "quantity": quantity})
 
 
+# === Conditional Orders (v1 ashare only; engine triggers on 30s tick) ===
+
+def place_conditional(stock_code: str, side: str, quantity: int,
+                      trigger_dir: str, trigger_price, expiry: str = "day",
+                      account_id: int = None, client_order_id: str = None):
+    """Place a conditional order (trigger when price crosses, then matched by existing rules).
+
+    Args:
+        stock_code: e.g. 600519.SH
+        side: "buy" | "sell"
+        quantity: number of shares, must be a lot multiple (100).
+        trigger_dir: "le" (fire when price <= trigger_price) | "ge" (fire when price >= trigger_price).
+        trigger_price: trigger price.
+        expiry: "day" (void after 15:00 same day) | "gtc" (good-till-cancelled). Default "day".
+        account_id: optional — auto-resolves if omitted; auto-creates an account when you have none.
+        client_order_id: optional idempotency key — retrying with the same value returns the
+            original order instead of placing a duplicate (strongly recommended for agents).
+
+    Note: if the current price has already crossed at placement time, the order fires
+    immediately and the response status may be "filled"/"rejected" right away.
+    """
+    aid = account_id if account_id is not None else _ensure_account_id()
+    if not aid:
+        return _no_account_error(trade=True)
+    body = {"stock_code": stock_code, "side": side, "quantity": quantity,
+            "trigger_dir": trigger_dir, "trigger_price": trigger_price, "expiry": expiry}
+    if client_order_id:
+        body["client_order_id"] = client_order_id
+    return _post(f"/{MARKET}/accounts/{aid}/orders/conditional", body)
+
+
+def get_conditional_orders(status: str = None, limit: int = 50, account_id: int = None):
+    """List conditional orders (newest first).
+
+    Args:
+        status: optional filter — pending | filled | rejected | expired | cancelled.
+        limit: max results (default 50, max 200).
+        account_id: optional — auto-resolves your personal account if omitted.
+    """
+    aid = account_id if account_id is not None else _pick_account_id()
+    if not aid:
+        return _no_account_error()
+    params = {"limit": min(limit, 200)}
+    if status:
+        params["status"] = status
+    return _get(f"/accounts/{aid}/orders/conditional", params, sim=True)
+
+
+def cancel_conditional(order_id: int, account_id: int = None):
+    """Cancel a pending conditional order (idempotent per CAS; non-pending → 409, missing → 404).
+
+    Args:
+        order_id: conditional order id (from place_conditional / get_conditional_orders).
+        account_id: optional — auto-resolves your personal account if omitted.
+    """
+    aid = account_id if account_id is not None else _pick_account_id()
+    if not aid:
+        return _no_account_error()
+    return _delete(f"/accounts/{aid}/orders/conditional/{order_id}")
+
+
 # === History (requires account_id) ===
 
 def get_orders(limit: int = 50, account_id: int = None):
@@ -364,6 +435,14 @@ def main():
     parser.add_argument("--period", default="1d")
     parser.add_argument("--limit", type=int, default=60)
     parser.add_argument("--page", type=int, default=1)
+    parser.add_argument("--trigger-dir", choices=["le", "ge"],
+                        help="conditional: le = fire when price <= trigger; ge = fire when price >= trigger")
+    parser.add_argument("--trigger-price", type=float)
+    parser.add_argument("--expiry", choices=["day", "gtc"], default="day")
+    parser.add_argument("--order-id", type=int)
+    parser.add_argument("--client-order-id")
+    parser.add_argument("--status", choices=["pending", "filled", "rejected", "expired", "cancelled"],
+                        help="conditional_orders: filter by status")
     parser.add_argument("--token", help="Save API token to ~/.finmeta/config.json")
     parser.add_argument("--account-id", type=int, help="Save simulation account ID to config.json")
     args = parser.parse_args()
@@ -383,7 +462,9 @@ def main():
         sys.exit(0)
 
     AUTH_ACTIONS = {"account", "positions", "buy", "sell", "orders",
-                    "buy_orders", "sell_orders", "balance_log", "fee_log"}
+                    "buy_orders", "sell_orders", "balance_log", "fee_log",
+                    "conditional_buy", "conditional_sell",
+                    "conditional_orders", "conditional_cancel"}
 
     if args.action in AUTH_ACTIONS:
         _require_token()
@@ -404,6 +485,19 @@ def main():
         result = buy(code, args.quantity) if code and args.quantity else {"success": False, "error": "missing --symbol or --quantity"}
     elif args.action == "sell":
         result = sell(code, args.quantity) if code and args.quantity else {"success": False, "error": "missing --symbol or --quantity"}
+    elif args.action in ("conditional_buy", "conditional_sell"):
+        if not (code and args.quantity and args.trigger_price and args.trigger_dir):
+            result = {"success": False,
+                      "error": "missing --symbol / --quantity / --trigger-dir / --trigger-price"}
+        else:
+            result = place_conditional(code, "buy" if args.action == "conditional_buy" else "sell",
+                                       args.quantity, args.trigger_dir, args.trigger_price,
+                                       args.expiry, client_order_id=args.client_order_id)
+    elif args.action == "conditional_orders":
+        result = get_conditional_orders(status=args.status, limit=args.limit)
+    elif args.action == "conditional_cancel":
+        result = (cancel_conditional(args.order_id) if args.order_id
+                  else {"success": False, "error": "missing --order-id"})
     elif args.action == "orders":
         result = get_orders(args.limit)
     elif args.action == "buy_orders":
