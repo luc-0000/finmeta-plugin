@@ -15,6 +15,7 @@ Base: `https://fin-meta.net/api/v1/hkstock`
 
 | Action | HTTP | Path | Body |
 |--------|------|------|------|
+| create_account | POST | /simulation/accounts | {market: hkstock, name?} — new id saved to config |
 | account (list) | GET | /accounts | — |
 | account (detail) | GET | /accounts/{id} | — |
 | positions | GET | /accounts/{id}/positions | — |
@@ -35,4 +36,4 @@ Base: `https://fin-meta.net/api/v1/hkstock`
 - Lot size 10 shares; T+0 settlement; no daily price limit.
 - Commission 0.1% (min HK$5); stamp tax 0.1% (sell only).
 - Symbol universe: 142 competition symbols (HK.AI list), not the full HK market.
-- Account auto-creates on first trade if no account_id passed.
+- Account auto-creates on first trade if no account_id passed; explicit `--action create_account` also available.

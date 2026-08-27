@@ -46,6 +46,7 @@ python ashare/api.py --account-id 123
 
 - All four markets **auto-resolve** your personal account — no account_id needed
 - Placing a trade with no account under this token **auto-creates** one and saves it to config
+- No account yet and want one? Create explicitly: `python <market>/api.py --action create_account` (id saved to config automatically; optional `--name "..."`)
 - A saved account_id is **ownership-checked** per call: if it belongs to another token's user
   (leftover after switching tokens), it is cleared automatically and your own account is used —
   switching tokens never deadlocks a market
@@ -61,6 +62,7 @@ python ashare/api.py --account-id 123
 | Quote | `--action get_quote --symbols "600519.SH"` |
 | K-line | `--action kline --symbol 600519.SH` |
 | Account | `--action account` |
+| Create account | `--action create_account` (optional `--name "..."`) |
 | Positions | `--action positions` |
 | Buy | `--action buy --symbol 600519.SH --quantity 100` |
 | Sell | `--action sell --symbol 600519.SH --quantity 100` |
@@ -81,6 +83,7 @@ python ashare/api.py --account-id 123
 | Quotes | `--action get_quotes --symbols "BTC/USDT"` |
 | K-line | `--action kline --symbol BTC/USDT` |
 | Account | `--action account` |
+| Create account | `--action create_account` (optional `--name "..."`) |
 | Positions | `--action positions` |
 | Buy | `--action buy --symbol BTC/USDT --quantity 0.01` |
 | Sell | `--action sell --symbol BTC/USDT --quantity 0.01` |
@@ -96,6 +99,7 @@ python ashare/api.py --account-id 123
 | Quotes | `--action get_quotes --symbols "AAPL"` |
 | K-line | `--action kline --symbol AAPL` |
 | Account | `--action account` |
+| Create account | `--action create_account` (optional `--name "..."`) |
 | Positions | `--action positions` |
 | Buy | `--action buy --symbol AAPL --quantity 10` |
 | Sell | `--action sell --symbol AAPL --quantity 10` |
@@ -120,6 +124,7 @@ Pass `--client-order-id <key>` for idempotency — retries with the same key ret
 | Quotes | `--action get_quotes --symbols "00700.HK"` |
 | K-line | `--action kline --symbol 00700.HK --period 1d` |
 | Account | `--action account` |
+| Create account | `--action create_account` (optional `--name "..."`) |
 | Positions | `--action positions` |
 | Buy | `--action buy --symbol 00700.HK --quantity 10` |
 | Sell | `--action sell --symbol 00700.HK --quantity 10` |
@@ -140,6 +145,8 @@ Pass `--client-order-id <key>` for idempotency — retries with the same key ret
 1. Token: load from `~/.finmeta/config.json` (`access_token`). If missing, invoke `finmeta-plugin` setup skill.
 2. account_id: nothing to do — every market auto-resolves your personal account
    (ownership-checks any id saved in config, auto-creates an account when you trade with none).
+   User has no account and wants one? `python <market>/api.py --action create_account`
+   creates it and pins the id in config.
 3. If a call reports no account under this token and the user names one, persist it first:
    `python <market>/api.py --account-id <id>` (writes to `~/.finmeta/config.json`).
 

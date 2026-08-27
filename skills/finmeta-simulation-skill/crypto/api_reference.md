@@ -15,6 +15,7 @@ Base: `https://fin-meta.net/api/v1/crypto`
 
 | Action | HTTP | Path | Body |
 |--------|------|------|------|
+| create_account | POST | /simulation/accounts | {market: crypto, name?} — new id saved to config |
 | account (list) | GET | /accounts | — |
 | account (detail) | GET | /accounts/{id} | — |
 | positions | GET | /accounts/{id}/positions | — |

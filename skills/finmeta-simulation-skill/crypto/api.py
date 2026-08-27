@@ -230,11 +230,9 @@ def _ensure_account_id():
     aid = _pick_account_id()
     if aid:
         return aid
-    resp = _post("/accounts", {"market": MARKET})
+    resp = create_account()
     if resp.get("success"):
-        new_id = resp["data"]["data"]["id"]
-        _save_account_id(new_id)
-        return new_id
+        return resp["data"]["data"]["id"]
     return None
 
 
@@ -247,7 +245,26 @@ def _no_account_error(trade: bool = False):
                 "error": f"No {MARKET} account and auto-create failed — {hint}"}
     return {"success": False,
             "error": f"No {MARKET} accounts found under this token — {hint}, "
-                     f"or place a trade first (a new account will be created)"}
+                     f"or create one: python {MARKET}/api.py --action create_account"}
+
+
+def create_account(name: str = None):
+    """Create a new simulation account for this market (explicit).
+
+    POST /simulation/accounts {market, name?} — on success the new account_id is
+    saved to ~/.finmeta/config.json (accounts.<MARKET>) and used by subsequent
+    calls. Use when the user has no account and wants one (explicit --action).
+
+    Args:
+        name: optional display name for the account.
+    """
+    body = {"market": MARKET}
+    if name:
+        body["name"] = name
+    resp = _post("/accounts", body)
+    if resp.get("success"):
+        _save_account_id(resp["data"]["data"]["id"])
+    return resp
 
 
 def get_account(account_id: int = None):
@@ -361,6 +378,7 @@ def main():
     parser.add_argument("--quantity", type=float)
     parser.add_argument("--limit", type=int, default=100)
     parser.add_argument("--token", help="Save API token to ~/.finmeta/config.json")
+    parser.add_argument("--name", help="Optional account display name (create_account)")
     args = parser.parse_args()
 
     if args.token:
@@ -373,7 +391,8 @@ def main():
         parser.print_help()
         sys.exit(0)
 
-    AUTH_ACTIONS = {"account", "buy", "sell", "orders", "positions", "balance_log"}
+    AUTH_ACTIONS = {"account", "buy", "sell", "orders", "positions", "balance_log",
+                    "create_account"}
 
     if args.action in AUTH_ACTIONS:
         _require_token()
@@ -384,6 +403,8 @@ def main():
         result = get_quotes(args.symbols) if args.symbols else {"success": False, "error": "missing --symbols"}
     elif args.action == "kline":
         result = get_kline(args.symbol, args.limit) if args.symbol else {"success": False, "error": "missing --symbol"}
+    elif args.action == "create_account":
+        result = create_account(args.name)
     elif args.action == "account":
         result = get_account()
     elif args.action == "positions":

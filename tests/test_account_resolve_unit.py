@@ -136,5 +136,88 @@ class AccountResolveUnitTests(unittest.TestCase):
                 self.assertIn("--account-id", result.get("error", ""), market)
 
 
+class CreateAccountUnitTests(unittest.TestCase):
+    """create_account 显式建盘（2026-08-27）：POST /simulation/accounts + 写回 config。
+
+    覆盖四市场统一行为：
+    - 成功：body 带 {market, name?}，新盘号写回 config（accounts.<market>）
+    - 失败：返回 success=False，不动 config
+    - _ensure_account_id 复用 create_account（SSOT，不再各自拼 POST）
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.cfg_path = Path(self._tmp.name) / "config.json"
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _mod(self, market):
+        mod = _load(market)
+        mod.ACCOUNTS_FILE = self.cfg_path
+        self.cfg_path.write_text(json.dumps({"access_token": "unit-test-token"}))
+        return mod
+
+    def test_create_ok_saves_id_and_sends_market(self):
+        """成功：POST body 带正确 market（+可选 name），新盘号写回 config。"""
+        for market in MARKETS:
+            with self.subTest(market=market):
+                mod = self._mod(market)
+                with patch.object(mod, "_post",
+                                  return_value={"success": True,
+                                                "data": {"data": {"id": 777,
+                                                                  "market": market}}}) as mock_post, \
+                     patch.dict(os.environ):
+                    os.environ.pop("FINTOOLS_SIMULATION_ACCOUNT_ID", None)
+                    result = mod.create_account("my sim")
+                self.assertTrue(result.get("success"), market)
+                body = mock_post.call_args[0][1]
+                self.assertEqual(body, {"market": market, "name": "my sim"}, market)
+                cfg = json.loads(self.cfg_path.read_text())
+                self.assertEqual(cfg["accounts"][market], 777,
+                                 f"{market}: create_account 盘号必须写回 config")
+
+    def test_create_without_name_omits_field(self):
+        """无 name：body 只有 market。"""
+        for market in MARKETS:
+            with self.subTest(market=market):
+                mod = self._mod(market)
+                with patch.object(mod, "_post",
+                                  return_value={"success": True,
+                                                "data": {"data": {"id": 778}}}) as mock_post, \
+                     patch.dict(os.environ):
+                    os.environ.pop("FINTOOLS_SIMULATION_ACCOUNT_ID", None)
+                    mod.create_account()
+                self.assertEqual(mock_post.call_args[0][1], {"market": market}, market)
+
+    def test_create_failure_keeps_config(self):
+        """建盘失败：success=False，config 不写。"""
+        for market in MARKETS:
+            with self.subTest(market=market):
+                mod = self._mod(market)
+                with patch.object(mod, "_post",
+                                  return_value={"success": False, "error": "HTTP 401"}), \
+                     patch.dict(os.environ):
+                    os.environ.pop("FINTOOLS_SIMULATION_ACCOUNT_ID", None)
+                    result = mod.create_account()
+                self.assertFalse(result.get("success"), market)
+                cfg = json.loads(self.cfg_path.read_text())
+                self.assertNotIn("accounts", cfg, market)
+
+    def test_ensure_reuses_create_account(self):
+        """_ensure_account_id 无盘路径必须走 create_account（SSOT：POST 只拼一处）。"""
+        for market in MARKETS:
+            with self.subTest(market=market):
+                mod = self._mod(market)
+                with patch.object(mod, "_get", return_value=_list_resp([])), \
+                     patch.object(mod, "create_account",
+                                  return_value={"success": True,
+                                                "data": {"data": {"id": 779}}}) as mock_create, \
+                     patch.dict(os.environ):
+                    os.environ.pop("FINTOOLS_SIMULATION_ACCOUNT_ID", None)
+                    self.assertEqual(mod._ensure_account_id(), 779, market)
+                mock_create.assert_called_once_with()
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

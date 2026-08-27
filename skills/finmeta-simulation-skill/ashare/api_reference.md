@@ -15,10 +15,12 @@ Base: `https://fin-meta.net/api/v1/ashare`
 
 account_id is auto-resolved (config id ownership-checked → personal account →
 auto-create on trade). Pass one explicitly only to override.
+No account yet? `--action create_account` creates one and saves it to config.
 
 | Action | HTTP | Path |
 |--------|------|------|
 | account | GET | /accounts/{account_id} |
+| create_account | POST | /simulation/accounts body {market: ashare, name?} — new id saved to config |
 | positions | GET | /accounts/{account_id}/positions |
 | list_my_accounts | GET | /accounts?lightweight=true |
 
