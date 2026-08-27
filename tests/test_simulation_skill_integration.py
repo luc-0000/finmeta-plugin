@@ -1,21 +1,19 @@
-"""Integration: finmeta-simulation-skill 全部公开函数打 localhost。
+"""Integration: finmeta-simulation-skill 全部公开函数打 fin-meta.net 云端。
 
 验证目标：skill 四个 market api.py 的每个公开函数（行情 + 账户 + 交易 + 规则）
-在本地环境真实可用 —— 直接 import skill 源码，通过 env 注入
+在云端真实可用 —— 直接 import skill 源码，通过 env 注入
 FINTOOLS_API_BASE / FINMETA_ACCESS_TOKEN / FINTOOLS_SIMULATION_ACCOUNT_ID，
 不是重新实现 HTTP 调用。
 
-跑法（token 从本地 backend .env 取，不落盘）：
-  TOKEN=$(grep -E '^FINMETA_ACCESS_TOKEN=' "$FINTOOLS_REPO/fintools_backend/.env" \
-    | sed 's/^FINMETA_ACCESS_TOKEN=//' | tr -d '\r\n')
-  FINMETA_ACCESS_TOKEN=$TOKEN conda run --no-capture-output -n fintools_backend \
+跑法（token 从 skill SSOT ~/.finmeta/config.json 取，或 env 注入）：
+  conda run --no-capture-output -n fintools_backend \
     python -u tests/test_simulation_skill_integration.py
-  # FINTOOLS_REPO = fintools 主仓库路径；在 finmeta-plugin repo 根目录下执行
+  # 在 finmeta-plugin repo 根目录下执行；token 缺省读 ~/.finmeta/config.json
 
 净零清理：每个 market 建独立测试盘（skill-integration-<market>），
 tearDownClass 统一 DELETE（级联清 positions/orders/balance_log）。
 测试盘生命周期走 canonical /api/v1/simulation/accounts（2026-08-21 路由统一）。
-注意：local 模式 backend 连云 RDS，交易写入云端测试盘后随删盘清理。
+注意：交易写入云端测试盘，随删盘清理。
 
 交易断言分两档：
   - crypto：24/7 且 T+0，buy/sell 必须真实成功（严格）
@@ -30,8 +28,20 @@ from pathlib import Path
 import requests
 
 SKILL_ROOT = Path(__file__).resolve().parents[1] / "skills" / "finmeta-simulation-skill"
-API_BASE = os.environ.setdefault("FINTOOLS_API_BASE", "http://localhost:8000")
-TOKEN = os.environ.get("FINMETA_ACCESS_TOKEN", "")
+API_BASE = os.environ.setdefault("FINTOOLS_API_BASE", "https://fin-meta.net")
+
+
+def _default_token() -> str:
+    """缺省从 skill SSOT ~/.finmeta/config.json 取（与 api.py 口径一致）。"""
+    cfg_file = Path.home() / ".finmeta" / "config.json"
+    try:
+        import json
+        return json.loads(cfg_file.read_text()).get("access_token", "")
+    except (OSError, ValueError):
+        return ""
+
+
+TOKEN = os.environ.get("FINMETA_ACCESS_TOKEN", "") or _default_token()
 
 # 业务错误关键词：命中视为"链路通、业务规则拦截"（非函数故障）
 BUSINESS_RULE_KEYWORDS = ("t+1", "closed", "hours", "limit", "停", "闭市",

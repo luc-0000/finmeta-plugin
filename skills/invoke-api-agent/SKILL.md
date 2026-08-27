@@ -43,7 +43,7 @@ curl --max-time 600 -X POST "$FC_INVOKE_URL" \
 
 - Insufficient credits → HTTP 402.
 - For Task Agents (trading / deep-research / strategy / ...), use `finmeta-task-agent` (A2A), not this.
-- All discovery and invoke calls target **cloud** (`https://fin-meta.net`), not localhost.
+- All discovery and invoke calls target **cloud** (`https://fin-meta.net`).
 
 ## Timeouts
 

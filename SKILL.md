@@ -32,7 +32,7 @@ If the file or `access_token` field is missing, the skill stops and asks the use
 
 ### Step 1: Get your token
 
-1. Open **https://fin-meta.net/profile** (cloud) or `http://localhost/profile` (local dev)
+1. Open **https://fin-meta.net/profile**
 2. Click **"Access Token"** tab
 3. Copy the token
 

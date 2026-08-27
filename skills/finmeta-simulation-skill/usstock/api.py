@@ -529,11 +529,13 @@ def main():
         else:
             result = place_conditional(args.symbol, "buy" if args.action == "conditional_buy" else "sell",
                                        args.quantity, args.trigger_dir, args.trigger_price,
-                                       args.expiry, client_order_id=args.client_order_id)
+                                       args.expiry, client_order_id=args.client_order_id,
+                                       account_id=args.account_id)
     elif args.action == "conditional_orders":
-        result = get_conditional_orders(status=args.status, limit=args.limit)
+        result = get_conditional_orders(status=args.status, limit=args.limit,
+                                        account_id=args.account_id)
     elif args.action == "conditional_cancel":
-        result = (cancel_conditional(args.order_id) if args.order_id
+        result = (cancel_conditional(args.order_id, account_id=args.account_id) if args.order_id
                   else {"success": False, "error": "missing --order-id"})
     elif args.action == "orders":
         result = get_orders(args.limit)
