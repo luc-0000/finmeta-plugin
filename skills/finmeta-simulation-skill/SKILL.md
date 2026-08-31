@@ -123,7 +123,7 @@ python ashare/api.py --account-id 123
 
 ### Conditional Orders (all four markets, one engine)
 
-Same conditional-order engine for all markets; market differences are data (bar cadence, trading hours, day-close time). Trigger engine reads each market's bars from the platform database (no external quote API) and ticks every 30s. Fills happen at the triggering bar's closing price — how long a cross takes to fire depends on the market's bar cadence (~5 min for A-Share 5m bars, ~1-2 min for HK 1Min / crypto 1m bars).
+Same conditional-order engine for all markets; market differences are data (bar cadence, trading hours, day-close time). Trigger engine reads each market's bars from the platform database (no external quote API) and ticks every 30s around the clock (per-market session gate skips off-hours). Fills happen at the triggering bar's closing price — how long a cross takes to fire depends on the market's bar cadence (~1 min for A-Share 1m snapshots; ~1-2 min for HK 1Min / crypto 1m bars; US reads 5m bars).
 `--trigger-dir le` = fire when the bar's low ≤ trigger (typical for buy-the-dip); `ge` = fire when the bar's high ≥ trigger (typical for take-profit sell). `--expiry day` voids at the market's close (A-Share 15:00 / US 16:00 ET / HK 16:00 HKT; rejected off-hours) and is auto-converted to `gtc` on crypto (24/7, no daily close); `gtc` stays until cancelled/filled.
 If the latest bar has already crossed when you place (during trading hours), the order fires immediately (response may come back `filled`/`rejected`).
 Pass `--client-order-id <key>` for idempotency — retries with the same key return the original order, never duplicate.

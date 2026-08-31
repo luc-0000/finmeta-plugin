@@ -2,6 +2,30 @@
 
 Base: `https://fin-meta.net/api/v1/ashare`
 
+## Response Envelope & Field Names (verified 2026-08-29)
+
+Every CLI action prints one JSON blob — the real payload is one level deeper than you'd guess:
+
+```json
+{"success": true, "data": {"code": 0, "msg": "ok", "data": <payload>}}
+```
+
+**Trade responses have NO `status` field.** Success = `success: true` plus
+`order_id` / `price` / `fee` in the payload. Failure = `success: false` with a
+structured `error`, e.g. the T+1 gate:
+`Insufficient sellable position (T+1): 000001.SZ 0.000 sellable, 100 requested`.
+
+Actual payload field names (these are the contract — don't infer from other APIs):
+
+| Action | Payload fields |
+|---|---|
+| account | `id`, `name`, `market`, `current_balance`, `total_market_value`, `total_assets`, `total_profit`, `total_profit_pct`, `initial_balance`, `settlement_date` |
+| buy / sell | `order_id`, `stock_code`, `price`, `quantity`, `total`, `fee`, `trade_time` — no `status` |
+| get_quote | `stock_code`, `stock_name`, `latest_price`, `change_pct`, `volume`, `price_source` (`kline_1m` = 1m snapshot primary), `kline_date` |
+| orders / buy_orders / sell_orders | `id`, `side`, `price`, `quantity`, `fee`, `source`, `trade_time`, `error` — no `status`/`created_at`; `error: null` means filled |
+| positions | `holding_quantity` (not `quantity`), `available_quantity` (0 while T+1-locked), `avg_cost`, `latest_price`, `profit_pct`, `profit_amt`, `last_buy_time` |
+| conditional orders | `id`, `side`, `trigger_price`, `client_order_id`, `status` (`pending`/`filled`/`rejected`/`expired`/`cancelled`), `created_at` |
+
 ## Market Data (no auth)
 
 | Action | HTTP | Path |
@@ -34,9 +58,10 @@ No account yet? `--action create_account` creates one and saves it to config.
 
 ## Conditional Orders (Bearer Token required)
 
-Trigger engine reads 5-minute bars from the platform database (no external quote API) and
-ticks every 30s during auction hours. Fills happen at the triggering bar's closing price,
-so a cross may take up to ~5 minutes to fire. If the latest bar has already crossed at
+Trigger engine reads 1-minute snapshots from the platform database (sole data source for
+A-Share; no external quote API) and ticks every 30s around the clock
+(per-market session gate skips off-hours). Fills happen at the triggering bar's closing price,
+so a cross typically fires within ~1 minute. If the latest bar has already crossed at
 placement time, the order fires immediately — the response status may be `filled`/`rejected` right away.
 
 | Action | HTTP | Path | Body / Query |

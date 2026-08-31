@@ -19,7 +19,9 @@ Base URL: `https://fin-meta.net/api/v1`. `{market}` = `ashare` | `usstock` | `hk
 
 ## Read the watchlist
 
-Returns `[{"symbol", "name", "added_at"}, ...]`, oldest first. Empty array = no preference.
+Returns `[{"symbol", "name", "added_at"}, ...]` in the order symbols were added/saved (add
+appends at the end). `added_at` is when the symbol was **first** added — later
+add/remove/replace operations keep it. Empty array = no preference.
 
 ```bash
 curl -H "Authorization: Bearer $FINMETA_ACCESS_TOKEN" \

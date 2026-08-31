@@ -2,7 +2,7 @@
   "name": "finmeta-plugin",
   "displayName": "FinMeta Client",
   "description": "FinMeta client plugin — 5 skills: simulation trading (A-Share / US Stock / HK Stock / Crypto: market data, accounts, orders incl. conditional orders), market-data (symbols/quotes/kline, read-only), watchlist (user stock pool: read/add/remove per market), invoke-api-agent (call type=api agents), finmeta-task-agent (call task agents via A2A).",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "author": {
     "name": "lu"
   }

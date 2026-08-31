@@ -59,14 +59,19 @@ curl -H "Authorization: Bearer $FINMETA_ACCESS_TOKEN" \
 
 ## Kline (candles)
 
-`period`: A-Share `5m|1h|1d`, US Stock `5m|1h|1d`, HK Stock `1m|5m|1h|1d`, Crypto `1m|5m|1h|1d`. `limit`: 1–500 (default 100).
+`period`: A-Share `1m|5m|1h|1d`, US Stock `5m|1h|1d`, HK Stock `1m|5m|1h|1d`, Crypto `1m|5m|1h|1d`. `limit`: 1–500 (default 100).
 
 > **US Stock**: native bar is 5m; `1h` and `1d` are server-aggregated from 5m. Use `period=1d` for daily candles — do NOT pull 5m and aggregate client-side.
+> **A-Share**: native data is 1-minute snapshots; `5m`/`1h`/`1d` are server-aggregated from 1m snapshots (~30 days of history). Use `period=1d` for daily candles.
 
 ```bash
 # Crypto — BTC 1-hour candles, last 50
 curl -H "Authorization: Bearer $FINMETA_ACCESS_TOKEN" \
   "https://fin-meta.net/api/v1/public/markets/crypto/kline?symbol=BTC/USDT&period=1h&limit=50"
+
+# A-Share — Moutai 1-minute candles, last 30 (during/after trading hours)
+curl -H "Authorization: Bearer $FINMETA_ACCESS_TOKEN" \
+  "https://fin-meta.net/api/v1/public/markets/ashare/kline?symbol=600519.SH&period=1m&limit=30"
 
 # A-Share — Moutai daily, last 30
 curl -H "Authorization: Bearer $FINMETA_ACCESS_TOKEN" \
@@ -88,6 +93,7 @@ curl -H "Authorization: Bearer $FINMETA_ACCESS_TOKEN" \
 ## Notes
 
 - A-Share symbols returns the full active list; use `keyword` + `limit` to filter. HK Stock symbols covers 142 competition symbols only — see `README.md`.
+- A-Share kline: the 1-minute snapshot table is the **sole source** — `1m` derives per-minute bars from snapshots, `5m`/`1h` are bucketed from 1m, `1d` is day-level (open = first snapshot's open; volume/amount = final cumulative). Coverage starts 2026-08-29 with ~30 days retention; earlier ranges return empty. Per-minute volume/amount are exact; high/low are exact only when the minute sets a new day extreme, otherwise bounded by that minute's open/close.
 - Crypto kline data is 1-minute native; larger periods are server-aggregated.
 - HK Stock kline updates every 5 minutes during HK trading hours (09:30–16:00 HKT); `1m` is native, `5m`/`1h`/`1d` are server-aggregated from 1m.
 - No account needed; no credits charged.

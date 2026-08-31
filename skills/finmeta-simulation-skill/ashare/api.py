@@ -340,13 +340,13 @@ def sell(stock_code: str, quantity: int, account_id: int = None):
                  {"stock_code": stock_code, "quantity": quantity})
 
 
-# === Conditional Orders (all four markets share one engine; ashare reads 5m bars from
-# === the platform DB, ticks every 30s during auction hours; fills at the bar's close) ===
+# === Conditional Orders (all four markets share one engine; ashare reads 1m snapshots ===
+# === from the platform DB (sole source), ticks every 30s; fills at the bar's close) ===
 
 def place_conditional(stock_code: str, side: str, quantity: int,
                       trigger_dir: str, trigger_price, expiry: str = "day",
                       account_id: int = None, client_order_id: str = None):
-    """Place a conditional order (triggers when a 5-minute bar crosses, then matched by existing rules).
+    """Place a conditional order (triggers when a bar crosses, then matched by existing rules).
 
     Args:
         stock_code: e.g. 600519.SH
@@ -360,9 +360,10 @@ def place_conditional(stock_code: str, side: str, quantity: int,
         client_order_id: optional idempotency key — retrying with the same value returns the
             original order instead of placing a duplicate (strongly recommended for agents).
 
-    Note: prices come from database-stored 5m bars, so a cross may take up to ~5 minutes
-    to fire. If the latest bar has already crossed at placement time, the order fires
-    immediately and the response status may be "filled"/"rejected" right away.
+    Note: prices come from database-stored 1m snapshots (5m-bar fallback for symbols
+    without coverage), so a cross typically fires within ~1 minute. If the latest bar
+    has already crossed at placement time, the order fires immediately and the response
+    status may be "filled"/"rejected" right away.
     """
     aid = account_id if account_id is not None else _ensure_account_id()
     if not aid:
