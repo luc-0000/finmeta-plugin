@@ -1,11 +1,11 @@
 ---
 name: invoke-api-agent
-description: Invoke a published FinMeta API Agent (type=api) via its fc_invoke_url — synchronous HTTP POST. Use when the user wants to call a marketplace API agent (data / text-factor) and pay credits per call.
+description: Invoke a FinMeta API Agent (type=api) via its fc_invoke_url — synchronous HTTP POST. Use when the user wants to call a marketplace API agent (data / text-factor) or their own private strategy agent.
 ---
 
 # Invoke FinMeta API Agent
 
-Call a FinMeta **API Agent** (any agent with a non-null `fc_invoke_url`) published to the marketplace. Synchronous HTTP POST. **Charges `call_credits` per call** after `free_call_quota`; the owner calls free.
+Call a FinMeta **API Agent** (any agent with a non-null `fc_invoke_url`) — either published to the marketplace, or your own private strategy agent. Synchronous HTTP POST. **Charges `call_credits` per call** after `free_call_quota`; the owner calls free.
 
 > **Token**: load the `access_token` field from `~/.finmeta/config.json`:
 > ```bash
@@ -16,8 +16,11 @@ Call a FinMeta **API Agent** (any agent with a non-null `fc_invoke_url`) publish
 ## Step 1: List API agents
 
 ```bash
-curl -s 'https://fin-meta.net/api/v1/public/agents?type=api_agent' | python3 -m json.tool
+curl -s 'https://fin-meta.net/api/v1/public/agents?type=api_agent' \
+  -H "Authorization: Bearer $FINMETA_ACCESS_TOKEN" | python3 -m json.tool
 ```
+
+With the token the list also includes **your own private strategy agents** (`agent_category: "strategy_api_agent"`, `market_status` not `listed`) — they never appear on the public marketplace and are invisible to other users. Without a token you only see public marketplace agents; an invalid/expired token returns 401 (re-run the plugin setup to refresh it).
 
 Each result includes:
 - `fc_invoke_url` — the POST endpoint to call
@@ -42,6 +45,8 @@ curl --max-time 600 -X POST "$FC_INVOKE_URL" \
 ## Notes
 
 - Insufficient credits → HTTP 402.
+- Your own `strategy_api_agent` entries: owner invokes are free; other users cannot see or invoke them at all.
+- Run history for any agent you called: `GET /api/v1/public/agents/{repo_id}/runs` with the same Bearer token.
 - For Task Agents (trading / deep-research / strategy / ...), use `finmeta-task-agent` (A2A), not this.
 - All discovery and invoke calls target **cloud** (`https://fin-meta.net`).
 
