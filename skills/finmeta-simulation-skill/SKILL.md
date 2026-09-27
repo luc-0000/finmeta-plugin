@@ -57,6 +57,11 @@ python ashare/api.py --account-id 123
 
 ### A-Share (`ashare/api.py`)
 
+> **ETF 可直接交易**（2026-09-27 起）：A 股模拟账户里用 ETF 代码（如 `512400.SH`）即可
+> 买卖，共 1685 只。规则与实盘一致：股票型 ETF T+1、跨境/债券/黄金/货币 ETF T+0（当日
+> 买入当日可卖）；涨跌停 科创/创业板类 ±20%、其余 ±10%。ETF 行情也可用 market-data
+> skill 的 `market=etf`。`list_stocks` 仍是股票列表，ETF 代码直接下单/get_quote 即可。
+
 | Action | Command |
 |--------|---------|
 | Stock list | `--action list_stocks` |
