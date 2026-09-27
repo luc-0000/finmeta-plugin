@@ -1,6 +1,6 @@
 # FinMeta Market Data
 
-Read-only market data (symbols / quotes / kline) for **A-Share**, **US Stock**, **HK Stock**, **Crypto**. Usage and API examples live in `SKILL.md`; this README documents market-specific coverage details.
+Read-only market data (symbols / quotes / kline) for **A-Share**, **US Stock**, **HK Stock**, **Crypto**, **ETF (A-Share exchange-traded funds)**. Usage and API examples live in `SKILL.md`; this README documents market-specific coverage details.
 
 ## HK Stock coverage
 
@@ -39,3 +39,12 @@ curl -H "Authorization: Bearer $FINMETA_ACCESS_TOKEN" \
 ### Kline refresh
 
 HK Stock kline updates **every 5 minutes** during HK trading hours (09:30–16:00 HKT). `1m` is native; `5m`/`1h`/`1d` are server-aggregated from 1m.
+
+## ETF coverage
+
+`market=etf` covers **~1674 A-Share exchange-traded funds** (Shanghai + Shenzhen). Symbols use the same `512400.SH` format as A-Share stocks.
+
+- Kline semantics identical to A-Share: native data is **1-minute snapshots**; `5m`/`1h`/`1d` are server-aggregated from 1m. Use `period=1d` for daily candles.
+- Updates **every minute** during CN trading hours; ~30 days of history.
+- Coverage starts **2026-09-22** — earlier ranges return empty.
+- ETF quotes/kline are read-only market data. Trading ETFs on the simulation is not yet supported (watch `finmeta-simulation-skill` for updates).

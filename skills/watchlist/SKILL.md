@@ -1,6 +1,6 @@
 ---
 name: watchlist
-description: Manage the user's FinMeta watchlist (stock pool) — read, add, remove symbols per market (A-Share / US Stock / HK Stock / Crypto). Use when the user asks to add a stock to their watchlist, remove one, show their watchlist, or when a trading agent needs the user's preferred stock universe before picking stocks. Soft guidance only — the pool never restricts trading.
+description: Manage the user's FinMeta watchlists (stock pools) — read, add, remove symbols per market (A-Share / US Stock / HK Stock / Crypto), for the default pool or any list by its id. Use when the user asks to add a stock to their watchlist, remove one, show their watchlist, references a watchlist by id or name, or when a trading agent needs the user's preferred stock universe before picking stocks. Soft guidance only — the pool never restricts trading.
 ---
 
 # FinMeta Watchlist (Stock Pool)
@@ -16,6 +16,40 @@ soft guidance for agents, never a trading restriction. An empty pool means
 > If the file doesn't exist or is empty, stop and ask the user to run `finmeta-plugin` setup skill first.
 
 Base URL: `https://fin-meta.net/api/v1`. `{market}` = `ashare` | `usstock` | `hkstock` | `crypto`.
+
+## Multiple named lists — addressing by id
+
+A user may own **several named lists per market**. Each has a numeric `id` and a
+`name`; exactly one is the `is_default` list (marked with a dot in the web UI,
+which also shows the id as `#N` next to every list name).
+
+All list endpoints return the envelope `{"code": 0, "msg": "ok", "data": ...}` —
+the payloads below are the `data` field.
+
+```bash
+# List all lists of a market: data = [{"id", "name", "is_default", "count"}, ...]
+curl -H "Authorization: Bearer $FINMETA_ACCESS_TOKEN" \
+  "https://fin-meta.net/api/v1/watchlist/ashare/lists"
+```
+
+The endpoints without an id (documented below) always operate on the **default**
+list. To operate on a specific list instead, use its id:
+
+```bash
+# Read one list by id (same payload shape as the default-pool read)
+curl -H "Authorization: Bearer $FINMETA_ACCESS_TOKEN" \
+  "https://fin-meta.net/api/v1/watchlist/ashare/lists/14"
+
+# Add / remove symbols in list 14 (same bodies as /add and /remove)
+curl -X POST -H "Authorization: Bearer $FINMETA_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"symbols": ["600519.SH"]}' \
+  "https://fin-meta.net/api/v1/watchlist/ashare/lists/14/add"
+```
+
+Also available by id: `PUT /watchlist/{market}/lists/{id}` (full replacement),
+`POST /watchlist/{market}/lists` (create), `PATCH .../lists/{id}` (rename),
+`DELETE .../lists/{id}` (delete; the default list cannot be deleted).
 
 ## Read the watchlist
 
@@ -80,6 +114,10 @@ with only the new symbols would wipe the user's existing pool.
 
 ## How agents should use the pool
 
+- **Which list to use**: if the user references a specific watchlist by id
+  ("use watchlist 14") → use `/{market}/lists/14` endpoints directly. If they
+  reference one by name → `GET /{market}/lists` and match `name`. Otherwise →
+  the default list (the id-less endpoints below).
 - Before picking stocks to analyze or trade, GET the watchlist of that market.
   Non-empty → prefer those symbols as the candidate universe.
   Empty → no preference, proceed as usual.
