@@ -1,6 +1,6 @@
 ---
 name: finmeta-simulation-skill
-description: Unified simulation trading skill. Supports A-Share, US Stock, HK Stock, and Crypto markets — market data, account queries, trading (buy/sell), and order history. Use when the user wants to check prices, analyze charts, manage simulation accounts, or place trades in any of these markets.
+description: Unified simulation trading skill. Supports A-Share, US Stock, HK Stock, and Crypto markets — market data, account queries, trading (buy/sell), order history, and watchlist (stock pool) management. Use when the user wants to check prices, analyze charts, manage simulation accounts, place trades, or manage their watchlists (add/remove/show a stock pool, or use the pool as the candidate universe before picking stocks) in any of these markets.
 ---
 
 # FinMeta Simulation Trading
@@ -155,6 +155,79 @@ Pass `--client-order-id <key>` for idempotency — retries with the same key ret
 | Rules | `--action rules` |
 
 **HK Stock notes**: T+0, lot_size=10, commission 0.1% (min HK$5), stamp tax 0.1% (sell only), no daily limit. Symbol = 5-digit code with `.HK` suffix (`00700.HK`, keep leading zeros). Kline `--period`: `1m` `5m` `1h` `1d`, refreshed every 5 min during HK trading hours (09:30–16:00 HKT). Universe = 142 competition symbols, not the full HK market.
+
+## Watchlist (Stock Pool)
+
+Per-user, per-market watchlist (股票池). It is the user's **preferred stock universe** — soft guidance for agents, never a trading restriction. An empty pool means "no preference" (agent may consider the full market).
+
+Unlike the trading tools above, this part is plain `curl` against `https://fin-meta.net/api/v1` — export the token first:
+
+```bash
+export FINMETA_ACCESS_TOKEN=$(python3 -c "import json,os;print(json.load(open(os.path.expanduser('~/.finmeta/config.json'))).get('access_token',''))")
+```
+
+`{market}` = `ashare` | `usstock` | `hkstock` | `crypto`. All endpoints return the envelope `{"code": 0, "msg": "ok", "data": ...}` — payloads below are the `data` field.
+
+### Which list to use
+
+A user may own **several named lists per market**. Each has a numeric `id` and a `name`; exactly one is the `is_default` list (the web UI marks it with a dot and shows every list's id as `#N`). If the user references a specific list by id ("use watchlist 14") → use the `/{market}/lists/14` endpoints; by name → `GET /{market}/lists` and match `name`; otherwise → the id-less **default-list** endpoints in the next section.
+
+```bash
+# List all lists of a market: data = [{"id", "name", "is_default", "count"}, ...]
+curl -H "Authorization: Bearer $FINMETA_ACCESS_TOKEN" \
+  "https://fin-meta.net/api/v1/watchlist/ashare/lists"
+
+# Read one list by id (same payload shape as the default-pool read)
+curl -H "Authorization: Bearer $FINMETA_ACCESS_TOKEN" \
+  "https://fin-meta.net/api/v1/watchlist/ashare/lists/14"
+
+# Add / remove symbols in list 14 (same bodies as /add and /remove below)
+curl -X POST -H "Authorization: Bearer $FINMETA_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"symbols": ["600519.SH"]}' \
+  "https://fin-meta.net/api/v1/watchlist/ashare/lists/14/add"
+```
+
+Also available by id: `PUT /watchlist/{market}/lists/{id}` (full replacement), `POST /watchlist/{market}/lists` (create), `PATCH .../lists/{id}` (rename), `DELETE .../lists/{id}` (delete; the default list cannot be deleted).
+
+### Read / add / remove / replace (default list)
+
+```bash
+# Read: data = [{"symbol", "name", "added_at"}, ...] in the order symbols were
+# added/saved; added_at = when first added (survives later edits). Empty = no preference.
+curl -H "Authorization: Bearer $FINMETA_ACCESS_TOKEN" \
+  "https://fin-meta.net/api/v1/watchlist/ashare"
+
+# Add — **use this for "add XXX to my watchlist"**: appends at the end, skips
+# symbols already in the pool, never clears it
+curl -X POST -H "Authorization: Bearer $FINMETA_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"symbols": ["600519.SH", "000858.SZ"]}' \
+  "https://fin-meta.net/api/v1/watchlist/ashare/add"
+
+# Remove — unknown symbols ignored, the rest keep their order
+curl -X POST -H "Authorization: Bearer $FINMETA_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"symbols": ["600519.SH"]}' \
+  "https://fin-meta.net/api/v1/watchlist/ashare/remove"
+
+# Replace — **full replacement, only for "set my watchlist to exactly these"**;
+# requires the complete symbol list, anything omitted is dropped. For plain
+# add/remove prefer the endpoints above — a bare PUT with only the new symbols
+# would wipe the user's existing pool.
+curl -X PUT -H "Authorization: Bearer $FINMETA_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"symbols": ["600519.SH", "000858.SZ"]}' \
+  "https://fin-meta.net/api/v1/watchlist/ashare"
+```
+
+Symbol format per market: A-Share `600519.SH` / `000858.SZ`, US `AAPL`, HK `00700.HK`, Crypto `BTC/USDT`. If unsure of the code, look it up with the `market-data` skill's symbols endpoint first.
+
+### How agents should use the pool
+
+- Before picking stocks to analyze or trade, GET the watchlist of that market. Non-empty → prefer those symbols as the candidate universe. Empty → no preference, proceed as usual.
+- The pool is advisory: it never blocks a trade outside the pool, and no endpoint enforces it. Do not treat it as a constraint.
+- Watchlists are per-market and independent of simulation accounts.
 
 ## Agent Notes
 
