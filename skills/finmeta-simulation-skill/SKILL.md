@@ -1,6 +1,6 @@
 ---
 name: finmeta-simulation-skill
-description: Unified simulation trading skill. Supports A-Share, US Stock, HK Stock, and Crypto markets — market data, account queries, trading (buy/sell), order history, and watchlist (stock pool) management. Use when the user wants to check prices, analyze charts, manage simulation accounts, place trades, or manage their watchlists (add/remove/show a stock pool, or use the pool as the candidate universe before picking stocks) in any of these markets.
+description: Unified simulation trading skill. Supports A-Share, US Stock, HK Stock, and Crypto markets — market data, account queries, trading (buy/sell), crypto perpetual (USDT-M contract) trading with leverage, order history, and watchlist (stock pool) management. Use when the user wants to check prices, analyze charts, manage simulation accounts, place trades, open/close leveraged crypto perp positions, or manage their watchlists (add/remove/show a stock pool, or use the pool as the candidate universe before picking stocks) in any of these markets.
 ---
 
 # FinMeta Simulation Trading
@@ -102,6 +102,36 @@ python ashare/api.py --account-id 123
 | Orders | `--action orders` |
 | Balance log | `--action balance_log` |
 | Rules | `--action rules` |
+| Perp open | `--action contract_open --symbol BTC/USDT:USDT --side long --leverage 5 --margin 100` — see [Crypto Perp (Contract)](#crypto-perp-contract) |
+| Perp close | `--action contract_close --position-id 12` (partial: add `--quantity 0.001`) |
+| Perp positions | `--action contract_positions` |
+| Perp rules | `--action contract_rules` |
+
+### Crypto Perp (Contract)
+
+`crypto/api.py` also trades **USDT-M perpetual futures** (isolated margin, long/short,
+1x–20x leverage). This is a **separate USDT wallet** from spot crypto (config key
+`accounts.crypto_contract`, auto-created on first trade) — spot `buy`/`sell` do NOT
+touch it, and perp `contract_open`/`contract_close` do NOT touch the spot wallet.
+
+| Rule | Value |
+|------|-------|
+| Leverage | 1x–20x, per-position, fixed until close (re-adding sets it to the latest) |
+| Taker fee | 0.05% of notional (open and close) |
+| Liquidation | `margin + funding + uPnL ≤ 0.5% × notional` → force-closed; fee 0.5% of notional, payout floors at 0 |
+| Funding | Real Binance events (8h) replayed against the wallet; rate > 0 = longs pay shorts |
+| Min notional | 5 USDT per order; margin per order ≤ 50% of initial balance |
+| Fill price | Latest 1m bar close of the perpetual; 24/7 |
+
+**Agent workflow**: list perp symbols with the `market-data` skill
+(`crypto/symbols?type=perp`, `BTC/USDT:USDT` format; quotes carry `funding_rate`)
+→ `contract_open` (size by `--margin` USDT or `--quantity` base asset) →
+`contract_positions` (mark price, uPnL, ROE, est. liquidation price, cum funding) →
+`contract_close --position-id <id>` (partial via `--quantity`; over-quantity clamps
+to full close). Opposite-side position on the same symbol must be closed first;
+same-side adds merge into one position (entry weighted-averages). Settlement is lazy:
+bars since the last visit are replayed on the next query, so funding and liquidation
+apply even after inactivity.
 
 ### US Stock (`usstock/api.py`)
 
@@ -284,6 +314,12 @@ result = crypto_place_conditional("BTC/USDT", "buy", 0.5,
 
 # Crypto
 result = crypto_buy("BTC/USDT", 0.01)
+
+# Crypto perp (separate wallet; see Crypto Perp section)
+from finmeta_simulation_skill.crypto import contract_open as crypto_open, contract_close as crypto_close, get_contract_positions as crypto_perp_positions
+result = crypto_open("BTC/USDT:USDT", "long", 5, margin_usdt=100)
+plist = crypto_perp_positions()["data"]["data"]   # → list with id / mark_price / est_liquidation_price
+result = crypto_close(plist[0]["id"])             # full close
 
 # US Stock
 result = usstock_buy("AAPL", 10)

@@ -23,6 +23,31 @@ Base: `https://fin-meta.net/api/v1/crypto`
 | buy | POST | /orders/buy | {symbol, quantity, account_id?} |
 | sell | POST | /orders/sell | {symbol, quantity, account_id?} |
 
+## Perp Contract (Bearer Token required)
+
+Wallet `market=crypto_contract` — a **separate USDT wallet** from spot crypto (config key
+`accounts.crypto_contract`; auto-created on first trade). Account / positions / orders /
+balance-log reuse the unified routes below — they return contract data when the account is
+a perp wallet; only open/close are contract-specific.
+
+| Action | HTTP | Path | Body / Query |
+|--------|------|------|------|
+| contract_rules | GET | /simulation/rules/crypto_contract | — (max leverage, MMR, fees, min notional) |
+| contract_open | POST | /simulation/crypto_contract/accounts/{id}/orders/open | {symbol: "BTC/USDT:USDT", side: long\|short, leverage: 1–20, margin_usdt \| quantity (base size; margin_usdt wins if both)} |
+| contract_close | POST | /simulation/crypto_contract/accounts/{id}/orders/close | {position_id, quantity?} — quantity omitted = full close; larger-than-held clamps to full close |
+| positions | GET | /accounts/{id}/positions | — contract wallet returns mark price, unrealized P/L, ROE, est. liquidation price, cumulative funding, margin, leverage |
+| account | GET | /accounts/{id} | — contract summary: balance, margin in use, total assets incl. position equity |
+| orders | GET | /accounts/{id}/orders?limit= | — open / close / liquidation records with realized P/L (net of fee) |
+
+Rule recap: isolated margin per position (max loss = margin); taker fee 0.05% of notional;
+liquidation when `margin + funding + uPnL ≤ 0.5% × notional` (liquidation fee 0.5% of
+notional, payout floored at 0); Binance funding events (8h) settle against the wallet
+during bar replay, rate > 0 = longs pay; min notional 5 USDT per order; margin per order
+≤ 50% of initial balance; fills at the latest 1m bar close; 24/7. Settlement is lazy —
+bars since the last visit are replayed on the next query, so funding/liquidation apply
+even after inactivity. Opposite-side position on the same symbol must be closed first;
+same-side adds merge into one position (entry weighted-averages, leverage = latest).
+
 ## Conditional Orders (Bearer Token required)
 
 One engine for all four markets; crypto fills at the triggering 1m bar's close, ticks every 30s around the clock.

@@ -16,7 +16,8 @@ import argparse, json, os, sys
 from pathlib import Path
 
 ACCOUNTS_FILE = Path.home() / ".finmeta" / "config.json"  # SSOT: access_token + accounts.*
-MARKET = "crypto"  # this module's key under accounts.*
+MARKET = "crypto"  # this module's key under accounts.* (spot)
+CONTRACT_MARKET = "crypto_contract"  # USDT-M perpetual wallet — separate account & config key
 API_BASE = os.getenv("FINTOOLS_API_BASE", "https://fin-meta.net")
 MARKET_DATA_PREFIX = "/api/v1/crypto"  # 行情（市场 router，与模拟盘无关）
 SIM_PREFIX = "/api/v1/simulation"     # 模拟盘 canonical（2026-08-21 路由统一）
@@ -68,8 +69,8 @@ def _save_token(token):
     ACCOUNTS_FILE.write_text(json.dumps(cfg, indent=2))
 
 
-def _load_account_id():
-    """Read account_id from env var (override) or ~/.finmeta/config.json (SSOT)."""
+def _load_account_id_for(market: str):
+    """Read account_id for a market key from env var (override) or ~/.finmeta/config.json (SSOT)."""
     val = os.getenv("FINTOOLS_SIMULATION_ACCOUNT_ID")
     if val:
         try:
@@ -78,27 +79,15 @@ def _load_account_id():
             pass
     if ACCOUNTS_FILE.exists():
         try:
-            return json.loads(ACCOUNTS_FILE.read_text()).get("accounts", {}).get(MARKET)
+            return json.loads(ACCOUNTS_FILE.read_text()).get("accounts", {}).get(market)
         except json.JSONDecodeError:
             return None
     return None
 
 
-def _save_account_id(account_id: int):
-    ACCOUNTS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    cfg = {}
-    if ACCOUNTS_FILE.exists():
-        try:
-            cfg = json.loads(ACCOUNTS_FILE.read_text())
-        except json.JSONDecodeError:
-            cfg = {}
-    cfg.setdefault("accounts", {})[MARKET] = account_id
-    ACCOUNTS_FILE.write_text(json.dumps(cfg, indent=2))
-
-
-def _require_account_id():
-    """Read account_id from env/config, fall back to None (crypto auto-creates)."""
-    return _load_account_id()
+def _load_account_id():
+    """Spot-wallet account_id (= accounts.crypto)."""
+    return _load_account_id_for(MARKET)
 
 
 def _headers():
@@ -199,7 +188,7 @@ def get_kline(symbol: str, limit: int = 100):
 
 # === Account (requires account_id) ===
 
-def _clear_account_id():
+def _clear_account_id(market: str = MARKET):
     """Remove this market's account_id from config (stale residue from another token's user)."""
     if not ACCOUNTS_FILE.exists():
         return
@@ -207,19 +196,19 @@ def _clear_account_id():
         cfg = json.loads(ACCOUNTS_FILE.read_text())
     except json.JSONDecodeError:
         return
-    if MARKET in cfg.get("accounts", {}):
-        del cfg["accounts"][MARKET]
+    if market in cfg.get("accounts", {}):
+        del cfg["accounts"][market]
         ACCOUNTS_FILE.write_text(json.dumps(cfg, indent=2))
 
 
-def _pick_account_id():
+def _pick_account_id(market: str = MARKET):
     """Resolve account_id: env/config (ownership-validated) → personal account from GET /simulation/accounts.
 
     config 存的 id 不在当前 token 名下 = 旧 token 残留：从 config 清除并改用名下盘，
     换 token 后首次调用即自愈（不再 404 死锁）。列表接口失败时不拦已配置的 id。
     """
-    aid = _require_account_id()
-    resp = _get("/accounts", {"market": MARKET}, sim=True)
+    aid = _load_account_id_for(market)
+    resp = _get("/accounts", {"market": market}, sim=True)
     if not resp.get("success"):
         return aid
     accounts = resp.get("data", {}).get("data", {}).get("accounts", [])
@@ -227,53 +216,63 @@ def _pick_account_id():
     if aid and aid in owned:
         return aid
     if aid:
-        _clear_account_id()
-        print(f"stale account id {aid} (accounts.{MARKET}) cleared — not owned by current token",
+        _clear_account_id(market)
+        print(f"stale account id {aid} (accounts.{market}) cleared — not owned by current token",
               file=sys.stderr)
     personal = next((a for a in accounts if a.get("competition_id") is None), None)
     acc = personal or (accounts[0] if accounts else None)
     return acc.get("id") if acc else None
 
 
-def _ensure_account_id():
+def _ensure_account_id(market: str = MARKET):
     """下单用：env/config → 名下盘 → 都没有则新建一个并写回 config（对齐旧自动建盘行为）。"""
-    aid = _pick_account_id()
+    aid = _pick_account_id(market)
     if aid:
         return aid
-    resp = create_account()
+    resp = create_account(market=market)
     if resp.get("success"):
         return resp["data"]["data"]["id"]
     return None
 
 
-def _no_account_error(trade: bool = False):
+def _no_account_error(trade: bool = False, market: str = MARKET):
     """名下无盘（或建盘失败）时的报错 — 提示用户传入最新模拟盘号。"""
     hint = ("provide the latest simulation account_id: pass account_id / set "
-            f"FINTOOLS_SIMULATION_ACCOUNT_ID / python {MARKET}/api.py --account-id <id>")
+            f"FINTOOLS_SIMULATION_ACCOUNT_ID / python {market}/api.py --account-id <id>")
     if trade:
         return {"success": False,
-                "error": f"No {MARKET} account and auto-create failed — {hint}"}
+                "error": f"No {market} account and auto-create failed — {hint}"}
     return {"success": False,
-            "error": f"No {MARKET} accounts found under this token — {hint}, "
-                     f"or create one: python {MARKET}/api.py --action create_account"}
+            "error": f"No {market} accounts found under this token — {hint}, "
+                     f"or create one: python {market}/api.py --action create_account"}
 
 
-def create_account(name: str = None):
+def create_account(name: str = None, market: str = MARKET):
     """Create a new simulation account for this market (explicit).
 
     POST /simulation/accounts {market, name?} — on success the new account_id is
-    saved to ~/.finmeta/config.json (accounts.<MARKET>) and used by subsequent
+    saved to ~/.finmeta/config.json (accounts.<market>) and used by subsequent
     calls. Use when the user has no account and wants one (explicit --action).
 
     Args:
         name: optional display name for the account.
+        market: account wallet — MARKET (spot, default) or CONTRACT_MARKET (perp).
     """
-    body = {"market": MARKET}
+    body = {"market": market}
     if name:
         body["name"] = name
     resp = _post("/accounts", body)
     if resp.get("success"):
-        _save_account_id(resp["data"]["data"]["id"])
+        aid = resp["data"]["data"]["id"]
+        ACCOUNTS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        cfg = {}
+        if ACCOUNTS_FILE.exists():
+            try:
+                cfg = json.loads(ACCOUNTS_FILE.read_text())
+            except json.JSONDecodeError:
+                cfg = {}
+        cfg.setdefault("accounts", {})[market] = aid
+        ACCOUNTS_FILE.write_text(json.dumps(cfg, indent=2))
     return resp
 
 
@@ -348,6 +347,84 @@ def sell(symbol: str, quantity: float, account_id: int = None):
 def get_rules():
     """Get crypto trading rules (min order size, commission, etc.)."""
     return _get(f"/rules/{MARKET}", sim=True)
+
+
+def get_contract_rules():
+    """Get crypto PERP contract rules (max leverage, MMR, fees, min notional)."""
+    return _get(f"/rules/{CONTRACT_MARKET}", sim=True)
+
+
+# ═══ Perp contract (market='crypto_contract' — a separate USDT wallet from spot;
+# ═══ isolated margin per position; see SKILL.md "Crypto Perp" section) ═══
+
+def contract_open(symbol: str, side: str, leverage: int,
+                  margin_usdt: float = None, quantity: float = None,
+                  account_id: int = None):
+    """Open a perpetual futures position (market order, isolated margin).
+
+    Args:
+        symbol: perpetual symbol, e.g. "BTC/USDT:USDT" (list via market-data skill
+            `crypto/symbols?type=perp`).
+        side: "long" | "short". An opposite-side position on the same symbol is
+            rejected — close it first; same-side adds merge into one position.
+        leverage: 1–20 (per-position, fixed until close; re-adding updates it to
+            the latest value).
+        margin_usdt: margin in USDT (notional = margin × leverage) — preferred;
+            ignored if both given.
+        quantity: base-asset size instead of margin (notional = qty × price).
+        account_id: optional — auto-resolves / auto-creates the perp wallet if omitted
+            (config key accounts.crypto_contract; separate from the spot crypto wallet).
+
+    Limits: min notional 5 USDT per order; margin per order ≤ 50% of initial balance;
+    taker fee 0.05% of notional. Fills at the latest 1m bar close.
+    """
+    _require_token()
+    if side not in ("long", "short"):
+        return {"success": False, "error": "side must be 'long' or 'short'"}
+    if margin_usdt is None and quantity is None:
+        return {"success": False, "error": "margin_usdt or quantity required"}
+    aid = account_id if account_id is not None else _ensure_account_id(CONTRACT_MARKET)
+    if not aid:
+        return _no_account_error(trade=True, market=CONTRACT_MARKET)
+    body = {"symbol": symbol, "side": side, "leverage": leverage}
+    if margin_usdt is not None:
+        body["margin_usdt"] = margin_usdt
+    else:
+        body["quantity"] = quantity
+    return _post(f"/{CONTRACT_MARKET}/accounts/{aid}/orders/open", body)
+
+
+def contract_close(position_id: int, quantity: float = None, account_id: int = None):
+    """Close a perpetual position (market order; profit/loss settles to the wallet).
+
+    Args:
+        position_id: the `id` field of a position returned by get_contract_positions.
+        quantity: partial-close size in base asset; omitted = close the whole position.
+            A quantity larger than held is clamped to a full close (no error).
+        account_id: optional — auto-resolves the perp wallet if omitted.
+    """
+    _require_token()
+    aid = account_id if account_id is not None else _pick_account_id(CONTRACT_MARKET)
+    if not aid:
+        return _no_account_error(market=CONTRACT_MARKET)
+    body = {"position_id": position_id}
+    if quantity is not None:
+        body["quantity"] = quantity
+    return _post(f"/{CONTRACT_MARKET}/accounts/{aid}/orders/close", body)
+
+
+def get_contract_positions(account_id: int = None):
+    """Get perp positions: mark price, unrealized P/L, ROE, est. liquidation price,
+    cumulative funding, margin, leverage.
+
+    Args:
+        account_id: optional — auto-resolves the perp wallet if omitted.
+    """
+    _require_token()
+    aid = account_id if account_id is not None else _pick_account_id(CONTRACT_MARKET)
+    if not aid:
+        return _no_account_error(market=CONTRACT_MARKET)
+    return _get(f"/accounts/{aid}/positions", sim=True)
 
 
 # === History (requires account_id) ===
@@ -467,6 +544,11 @@ def main():
     parser.add_argument("--symbol")
     parser.add_argument("--symbols")
     parser.add_argument("--quantity", type=float)
+    parser.add_argument("--side", choices=["long", "short"], help="contract_open direction")
+    parser.add_argument("--leverage", type=int, help="contract_open leverage 1-20")
+    parser.add_argument("--margin", type=float, dest="margin_usdt",
+                        help="contract_open margin in USDT (alternative to --quantity)")
+    parser.add_argument("--position-id", type=int, help="contract_close target position id")
     parser.add_argument("--limit", type=int, default=100)
     parser.add_argument("--trigger-dir", choices=["le", "ge"],
                         help="conditional: le = fire when bar low <= trigger; ge = fire when bar high >= trigger (fill = bar close)")
@@ -495,6 +577,7 @@ def main():
     AUTH_ACTIONS = {"account", "buy", "sell", "orders", "positions", "balance_log",
                     "conditional_buy", "conditional_sell",
                     "conditional_orders", "conditional_cancel",
+                    "contract_open", "contract_close", "contract_positions",
                     "create_account", "delete_account"}
 
     if args.action in AUTH_ACTIONS:
@@ -537,6 +620,23 @@ def main():
         result = get_orders(args.limit)
     elif args.action == "balance_log":
         result = get_balance_log()
+    elif args.action == "contract_open":
+        if not (args.symbol and args.side and args.leverage
+                and (args.margin_usdt or args.quantity)):
+            result = {"success": False,
+                      "error": "missing --symbol / --side / --leverage / (--margin or --quantity)"}
+        else:
+            result = contract_open(args.symbol, args.side, args.leverage,
+                                   margin_usdt=args.margin_usdt, quantity=args.quantity,
+                                   account_id=args.account_id)
+    elif args.action == "contract_close":
+        result = (contract_close(args.position_id, quantity=args.quantity,
+                                 account_id=args.account_id) if args.position_id
+                  else {"success": False, "error": "missing --position-id"})
+    elif args.action == "contract_positions":
+        result = get_contract_positions(account_id=args.account_id)
+    elif args.action == "contract_rules":
+        result = get_contract_rules()
     elif args.action == "rules":
         result = get_rules()
     else:

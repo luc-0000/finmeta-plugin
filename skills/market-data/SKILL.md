@@ -32,9 +32,13 @@ curl -H "Authorization: Bearer $FINMETA_ACCESS_TOKEN" \
 curl -H "Authorization: Bearer $FINMETA_ACCESS_TOKEN" \
   "https://fin-meta.net/api/v1/public/markets/hkstock/symbols"
 
-# Crypto
+# Crypto (spot, ~500 pairs — default)
 curl -H "Authorization: Bearer $FINMETA_ACCESS_TOKEN" \
   "https://fin-meta.net/api/v1/public/markets/crypto/symbols"
+
+# Crypto perpetuals (~730 USDT-M contracts, "BTC/USDT:USDT" format)
+curl -H "Authorization: Bearer $FINMETA_ACCESS_TOKEN" \
+  "https://fin-meta.net/api/v1/public/markets/crypto/symbols?type=perp&limit=1000"
 ```
 
 ## Quotes (latest price)
@@ -52,7 +56,8 @@ curl -H "Authorization: Bearer $FINMETA_ACCESS_TOKEN" \
 curl -H "Authorization: Bearer $FINMETA_ACCESS_TOKEN" \
   "https://fin-meta.net/api/v1/public/markets/hkstock/quotes?symbols=00700.HK,00005.HK"
 
-# Crypto — Bitcoin + Ethereum
+# Crypto — Bitcoin + Ethereum (perp symbols "BTC/USDT:USDT" also supported;
+# perp quotes carry funding_rate — the latest settled 8h rate; spot returns null)
 curl -H "Authorization: Bearer $FINMETA_ACCESS_TOKEN" \
   "https://fin-meta.net/api/v1/public/markets/crypto/quotes?symbols=BTC/USDT,ETH/USDT"
 
@@ -104,7 +109,8 @@ curl -H "Authorization: Bearer $FINMETA_ACCESS_TOKEN" \
 - A-Share symbols returns the full active list; use `keyword` + `limit` to filter. HK Stock symbols covers 142 competition symbols only — see `README.md`.
 - A-Share kline: the 1-minute snapshot table is the **sole source** — `1m` derives per-minute bars from snapshots, `5m`/`1h` are bucketed from 1m, `1d` is day-level (open = first snapshot's open; volume/amount = final cumulative). Coverage starts 2026-08-29 with ~30 days retention; earlier ranges return empty. Per-minute volume/amount are exact; high/low are exact only when the minute sets a new day extreme, otherwise bounded by that minute's open/close.
 - ETF kline: identical snapshot semantics to A-Share (above); ETF symbols list covers ~1674 funds, updates every minute during CN trading hours, coverage starts 2026-09-22 with ~30 days retention.
-- Crypto kline data is 1-minute native; larger periods are server-aggregated.
+- Crypto kline data is 1-minute native; larger periods are server-aggregated. The kline endpoint works for both spot (`BTC/USDT`) and perp (`BTC/USDT:USDT`) symbols; rolling ~60 days of 1m history.
+- Crypto perp symbols (`?type=perp`) are tradable in the simulation via the `finmeta-simulation-skill` Crypto Perp section (`contract_open` / `contract_close`).
 - HK Stock kline updates every 5 minutes during HK trading hours (09:30–16:00 HKT); `1m` is native, `5m`/`1h`/`1d` are server-aggregated from 1m.
 - No account needed; no credits charged.
 - For trading / account / orders, use `finmeta-simulation-skill` instead (ETF trading not yet supported).
