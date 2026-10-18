@@ -17,24 +17,27 @@ Base URL: `https://fin-meta.net/api/v1`. `{market}` = `ashare` | `usstock` | `hk
 
 ## Symbols (list / search)
 
-Returns up to `limit` stocks (default 100, max 10000); supports optional `keyword` filter.
+Optional `keyword` filter. `limit` = top-N (max 10000). Omitting `limit` returns
+the FULL list on backend ≥ 2026-10-08; older backend silently truncated to a
+top-100 by volume — for universe/membership use, always pass an explicit large
+`limit` (e.g. `limit=10000`).
 
 ```bash
-# A-Share
+# A-Share (~5700 active)
 curl -H "Authorization: Bearer $FINMETA_ACCESS_TOKEN" \
-  "https://fin-meta.net/api/v1/public/markets/ashare/symbols"
+  "https://fin-meta.net/api/v1/public/markets/ashare/symbols?limit=10000"
 
 # US Stock
 curl -H "Authorization: Bearer $FINMETA_ACCESS_TOKEN" \
-  "https://fin-meta.net/api/v1/public/markets/usstock/symbols"
+  "https://fin-meta.net/api/v1/public/markets/usstock/symbols?limit=10000"
 
 # HK Stock
 curl -H "Authorization: Bearer $FINMETA_ACCESS_TOKEN" \
-  "https://fin-meta.net/api/v1/public/markets/hkstock/symbols"
+  "https://fin-meta.net/api/v1/public/markets/hkstock/symbols?limit=10000"
 
-# Crypto (spot, ~500 pairs — default)
+# Crypto (spot, ~500 pairs)
 curl -H "Authorization: Bearer $FINMETA_ACCESS_TOKEN" \
-  "https://fin-meta.net/api/v1/public/markets/crypto/symbols"
+  "https://fin-meta.net/api/v1/public/markets/crypto/symbols?limit=10000"
 
 # Crypto perpetuals (~730 USDT-M contracts, "BTC/USDT:USDT" format)
 curl -H "Authorization: Bearer $FINMETA_ACCESS_TOKEN" \
@@ -106,7 +109,7 @@ curl -H "Authorization: Bearer $FINMETA_ACCESS_TOKEN" \
 
 ## Notes
 
-- A-Share symbols returns the full active list; use `keyword` + `limit` to filter. HK Stock symbols covers 142 competition symbols only — see `README.md`.
+- A-Share symbols returns the full active list; use `keyword` to filter. HK Stock symbols covers 142 competition symbols only — see `README.md`.
 - A-Share kline: the 1-minute snapshot table is the **sole source** — `1m` derives per-minute bars from snapshots, `5m`/`1h` are bucketed from 1m, `1d` is day-level (open = first snapshot's open; volume/amount = final cumulative). Coverage starts 2026-08-29 with ~30 days retention; earlier ranges return empty. Per-minute volume/amount are exact; high/low are exact only when the minute sets a new day extreme, otherwise bounded by that minute's open/close.
 - ETF kline: identical snapshot semantics to A-Share (above); ETF symbols list covers ~1674 funds, updates every minute during CN trading hours, coverage starts 2026-09-22 with ~30 days retention.
 - Crypto kline data is 1-minute native; larger periods are server-aggregated. The kline endpoint works for both spot (`BTC/USDT`) and perp (`BTC/USDT:USDT`) symbols; rolling ~60 days of 1m history.

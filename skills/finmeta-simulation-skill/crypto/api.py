@@ -355,18 +355,19 @@ def get_contract_rules():
 
 
 # ═══ Perp contract (market='crypto_contract' — a separate USDT wallet from spot;
-# ═══ isolated margin per position; see SKILL.md "Crypto Perp" section) ═══
+# ═══ isolated / cross margin per position; see SKILL.md "Crypto Perp" section) ═══
 
 def contract_open(symbol: str, side: str, leverage: int,
                   margin_usdt: float = None, quantity: float = None,
-                  account_id: int = None):
-    """Open a perpetual futures position (market order, isolated margin).
+                  account_id: int = None, margin_mode: str = "isolated"):
+    """Open a perpetual futures position (market order, isolated or cross margin).
 
     Args:
         symbol: perpetual symbol, e.g. "BTC/USDT:USDT" (list via market-data skill
             `crypto/symbols?type=perp`).
-        side: "long" | "short". An opposite-side position on the same symbol is
-            rejected — close it first; same-side adds merge into one position.
+        side: "long" | "short". An opposite-side (or different-margin-mode) position
+            on the same symbol is rejected — close it first; same-side adds merge
+            into one position.
         leverage: 1–20 (per-position, fixed until close; re-adding updates it to
             the latest value).
         margin_usdt: margin in USDT (notional = margin × leverage) — preferred;
@@ -374,6 +375,10 @@ def contract_open(symbol: str, side: str, leverage: int,
         quantity: base-asset size instead of margin (notional = qty × price).
         account_id: optional — auto-resolves / auto-creates the perp wallet if omitted
             (config key accounts.crypto_contract; separate from the spot crypto wallet).
+        margin_mode: "isolated" (default — opening debits margin + fee from the
+            wallet, max loss = margin) | "cross" (opening debits only the fee; the
+            wallet is shared collateral, liquidation is account-level, wallet floors
+            at 0). Cannot change mode on a symbol with an open position.
 
     Limits: min notional 5 USDT per order; margin per order ≤ 50% of initial balance;
     taker fee 0.05% of notional. Fills at the latest 1m bar close.
@@ -386,7 +391,8 @@ def contract_open(symbol: str, side: str, leverage: int,
     aid = account_id if account_id is not None else _ensure_account_id(CONTRACT_MARKET)
     if not aid:
         return _no_account_error(trade=True, market=CONTRACT_MARKET)
-    body = {"symbol": symbol, "side": side, "leverage": leverage}
+    body = {"symbol": symbol, "side": side, "leverage": leverage,
+            "margin_mode": margin_mode}
     if margin_usdt is not None:
         body["margin_usdt"] = margin_usdt
     else:
@@ -548,6 +554,9 @@ def main():
     parser.add_argument("--leverage", type=int, help="contract_open leverage 1-20")
     parser.add_argument("--margin", type=float, dest="margin_usdt",
                         help="contract_open margin in USDT (alternative to --quantity)")
+    parser.add_argument("--margin-mode", choices=["isolated", "cross"],
+                        default="isolated", dest="margin_mode",
+                        help="contract_open margin mode (default isolated)")
     parser.add_argument("--position-id", type=int, help="contract_close target position id")
     parser.add_argument("--limit", type=int, default=100)
     parser.add_argument("--trigger-dir", choices=["le", "ge"],
@@ -628,7 +637,7 @@ def main():
         else:
             result = contract_open(args.symbol, args.side, args.leverage,
                                    margin_usdt=args.margin_usdt, quantity=args.quantity,
-                                   account_id=args.account_id)
+                                   account_id=args.account_id, margin_mode=args.margin_mode)
     elif args.action == "contract_close":
         result = (contract_close(args.position_id, quantity=args.quantity,
                                  account_id=args.account_id) if args.position_id

@@ -33,20 +33,32 @@ a perp wallet; only open/close are contract-specific.
 | Action | HTTP | Path | Body / Query |
 |--------|------|------|------|
 | contract_rules | GET | /simulation/rules/crypto_contract | — (max leverage, MMR, fees, min notional) |
-| contract_open | POST | /simulation/crypto_contract/accounts/{id}/orders/open | {symbol: "BTC/USDT:USDT", side: long\|short, leverage: 1–20, margin_usdt \| quantity (base size; margin_usdt wins if both)} |
+| contract_open | POST | /simulation/crypto_contract/accounts/{id}/orders/open | {symbol: "BTC/USDT:USDT", side: long\|short, leverage: 1–20, margin_mode?: isolated\|cross (default isolated), margin_usdt \| quantity (base size; margin_usdt wins if both)} |
 | contract_close | POST | /simulation/crypto_contract/accounts/{id}/orders/close | {position_id, quantity?} — quantity omitted = full close; larger-than-held clamps to full close |
-| positions | GET | /accounts/{id}/positions | — contract wallet returns mark price, unrealized P/L, ROE, est. liquidation price, cumulative funding, margin, leverage |
-| account | GET | /accounts/{id} | — contract summary: balance, margin in use, total assets incl. position equity |
-| orders | GET | /accounts/{id}/orders?limit= | — open / close / liquidation records with realized P/L (net of fee) |
+| positions | GET | /accounts/{id}/positions | — contract wallet returns mark price, unrealized P/L, ROE, liquidation price (precise; cross = account-level estimate), cumulative funding, margin, margin_mode, leverage |
+| account | GET | /accounts/{id} | — contract summary: balance, market value, total assets incl. position equity |
+| orders | GET | /accounts/{id}/orders?limit= | — open / close / liquidation records with realized P/L (net of fee) and margin_mode |
 
-Rule recap: isolated margin per position (max loss = margin); taker fee 0.05% of notional;
-liquidation when `margin + funding + uPnL ≤ 0.5% × notional` (liquidation fee 0.5% of
-notional, payout floored at 0); Binance funding events (8h) settle against the wallet
-during bar replay, rate > 0 = longs pay; min notional 5 USDT per order; margin per order
-≤ 50% of initial balance; fills at the latest 1m bar close; 24/7. Settlement is lazy —
-bars since the last visit are replayed on the next query, so funding/liquidation apply
-even after inactivity. Opposite-side position on the same symbol must be closed first;
-same-side adds merge into one position (entry weighted-averages, leverage = latest).
+Margin modes (per symbol, chosen at open; cannot change while a position is open):
+- **isolated** (default): opening debits `margin + fee` from the wallet; max loss = the
+  position's margin (payout floored at 0). Liquidation when
+  `margin + cum_funding + uPnL ≤ (0.5% MMR + 0.5% liq fee) × notional`.
+- **cross**: opening debits only the fee — the wallet is shared collateral for all cross
+  positions. Liquidation is account-level:
+  `wallet + Σ uPnL ≤ (0.5% MMR + 0.5% liq fee) × Σ notional` (cross positions only).
+  When triggered, the biggest loser is closed first, re-checking after each close until
+  the requirement is met; if everything is gone and the wallet is still negative it is
+  clamped to 0 (sim insurance fund — you never owe).
+
+Other rules: taker fee 0.05% of notional; Binance funding events (8h) settle against the
+wallet during bar replay, rate > 0 = longs pay; min notional 5 USDT per order; margin per
+order ≤ 50% of initial balance; fills at the latest 1m bar close; 24/7. Settlement is
+lazy — bars since the last visit are replayed on the next query, so funding/liquidation
+apply even after inactivity. Opposite-side or different-margin-mode position on the same
+symbol must be closed first; same-side adds merge into one position (entry
+weighted-averages, leverage = latest). `liquidation_price` is exact for isolated
+(includes cum_funding, drifts with each funding settlement) and an account-level
+estimate for cross (moves with wallet and other positions, like Binance's est.).
 
 ## Conditional Orders (Bearer Token required)
 
