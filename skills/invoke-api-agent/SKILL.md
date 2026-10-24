@@ -1,6 +1,6 @@
 ---
 name: invoke-api-agent
-description: Invoke a FinMeta API Agent (type=api) via its fc_invoke_url — synchronous HTTP POST — or read a scheduled API agent's latest result via GET /fc/latest. Use when the user wants to call a marketplace API agent (data / text-factor), their own private strategy agent, or fetch the latest output of a scheduled agent.
+description: Invoke a FinMeta API Agent (type=api) via its fc_invoke_url — synchronous HTTP POST — or read a scheduled API agent's latest result via GET /fc/latest. Use when the user wants to call a marketplace API agent (data / factor), their own private strategy agent, or fetch the latest output of a scheduled agent.
 ---
 
 # Invoke FinMeta API Agent

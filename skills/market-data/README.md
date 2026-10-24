@@ -1,6 +1,6 @@
 # FinMeta Market Data
 
-Read-only market data (symbols / quotes / kline) for **A-Share**, **US Stock**, **HK Stock**, **Crypto**, **ETF (A-Share exchange-traded funds)**. Usage and API examples live in `SKILL.md`; this README documents market-specific coverage details.
+Read-only market data (symbols / quotes / kline) for **A-Share**, **US Stock**, **HK Stock**, **Crypto**, **ETF (A-Share exchange-traded funds)**, **Convertible Bonds (可转债)**. Usage and API examples live in `SKILL.md`; this README documents market-specific coverage details.
 
 ## HK Stock coverage
 
@@ -48,3 +48,13 @@ HK Stock kline updates **every 5 minutes** during HK trading hours (09:30–16:0
 - Updates **every minute** during CN trading hours; ~30 days of history.
 - Coverage starts **2026-09-22** — earlier ranges return empty.
 - ETF quotes/kline are read-only market data. Trading ETFs on the simulation is not yet supported (watch `finmeta-simulation-skill` for updates).
+
+## Convertible Bond coverage
+
+`market=cb` covers **~320 Shanghai + Shenzhen convertible bonds** (the full SH/SZ CB market; BSE not included). Symbols use the same `110081.SH` format as A-Share stocks (SH `11xxxx`, SZ `12xxxx`).
+
+- Kline semantics identical to A-Share: native data is **1-minute snapshots**; `5m`/`1h`/`1d` are server-aggregated from 1m. Use `period=1d` for daily candles.
+- Updates **every minute** during CN trading hours; ~30 days of history.
+- Coverage starts **2026-10-14** — earlier ranges return empty.
+- `volume` unit is **张 (bonds)** — 1 bond = 100 CNY face value; `amount` is in CNY.
+- Real-world CBs trade T+0 (same-day round trip) with ±20% price limits and a 0.001 minimum tick, but CB quotes/kline are read-only market data. CB trading on the simulation is not yet supported (watch `finmeta-simulation-skill` for updates).
