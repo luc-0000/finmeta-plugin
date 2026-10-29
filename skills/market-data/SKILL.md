@@ -1,11 +1,11 @@
 ---
 name: market-data
-description: Query FinMeta market data — symbols, quotes, kline for A-Share, US Stock, HK Stock, Crypto, ETF, Convertible Bonds (可转债). Read-only, does not charge credits. Use when the user wants to look up tickers, latest prices, or candlestick/kline data without trading.
+description: Query FinMeta market data — symbols, quotes, kline for A-Share, US Stock, HK Stock, Crypto, ETF, Convertible Bonds (可转债), plus the A-Share call-auction process feed (per-second indicative price/volume). Read-only, does not charge credits. Use when the user wants to look up tickers, latest prices, candlestick/kline data, or auction-phase price discovery without trading.
 ---
 
 # FinMeta Market Data
 
-Read-only market data (symbols / quotes / kline) for **A-Share**, **US Stock**, **HK Stock**, **Crypto**, **ETF**, **Convertible Bonds (可转债)**. **Does not charge credits.**
+Read-only market data (symbols / quotes / kline) for **A-Share**, **US Stock**, **HK Stock**, **Crypto**, **ETF**, **Convertible Bonds (可转债)**, plus the **A-Share call-auction process feed** (集合竞价过程，per-second indicative price/volume). **Does not charge credits. Requires a FINMETA_ACCESS_TOKEN (register a FinTools account → profile page).**
 
 > **Token**: load from persistent storage first:
 > ```bash
@@ -120,6 +120,35 @@ curl -H "Authorization: Bearer $FINMETA_ACCESS_TOKEN" \
   "https://fin-meta.net/api/v1/public/markets/cb/kline?symbol=110081.SH&period=5m&limit=30"
 ```
 
+## A-Share Call Auction process (集合竞价过程, ashare only)
+
+Per-second indicative points from the two A-Share call-auction sessions: **open auction 09:15–09:25** and **close auction 14:57–15:00**. During these windows the exchange publishes an indicative match price/volume that evolves as orders arrive and cancel — the raw material for bull/bear-trap (诱多/诱空) analysis.
+
+```bash
+# Ping An Bank — latest day with data (omit date)
+curl -H "Authorization: Bearer $FINMETA_ACCESS_TOKEN" \
+  "https://fin-meta.net/api/v1/public/markets/ashare/auction?symbol=000001.SZ"
+
+# Explicit trading day
+curl -H "Authorization: Bearer $FINMETA_ACCESS_TOKEN" \
+  "https://fin-meta.net/api/v1/public/markets/ashare/auction?symbol=000001.SZ&date=2026-10-27"
+```
+
+Response: list of points, ascending in time; `point_index` is a continuous ordinal across the whole day (open segment starts at 0, close segment continues).
+
+| Field | Meaning |
+|-------|---------|
+| `time` | Point timestamp `YYYY-MM-DD HH:MM:SS` (3–9 s cadence, event-driven — denser = more order activity) |
+| `price` | Indicative matched price (虚拟匹配价) |
+| `matched_volume` | Cumulative indicative matched volume, in 手. Converges to the official match volume; the last point may sit slightly below it (orders still arriving in the final seconds) |
+| `unmatched_volume` | Residual size of the un-matched side |
+| `unmatched_direction` | `+1` = buy side un-matched, `-1` = sell side un-matched |
+| `point_index` | Day-global point ordinal |
+
+- The official match result (09:26 / 15:00 bar) is **not** part of this feed — it lands in quotes/kline like any other bar.
+- Coverage starts **2026-09-01**; collected once daily after close. A known symbol with no auction data that day (e.g. suspended) returns an empty list; an unknown symbol returns **404** — use symbols from the `ashare/symbols` endpoint.
+- Typical day: open segment ~40–65 points per stock, close segment ~19; point counts vary with activity.
+
 ## Notes
 
 - A-Share symbols returns the full active list; use `keyword` to filter. HK Stock symbols covers 142 competition symbols only — see `README.md`.
@@ -129,5 +158,5 @@ curl -H "Authorization: Bearer $FINMETA_ACCESS_TOKEN" \
 - Crypto kline data is 1-minute native; larger periods are server-aggregated. The kline endpoint works for both spot (`BTC/USDT`) and perp (`BTC/USDT:USDT`) symbols; rolling ~60 days of 1m history.
 - Crypto perp symbols (`?type=perp`) are tradable in the simulation via the `finmeta-simulation-skill` Crypto Perp section (`contract_open` / `contract_close`).
 - HK Stock kline updates every 5 minutes during HK trading hours (09:30–16:00 HKT); `1m` is native, `5m`/`1h`/`1d` are server-aggregated from 1m.
-- No account needed; no credits charged.
+- All calls require a `FINMETA_ACCESS_TOKEN` (account registration is required to obtain one); no credits are charged for market data.
 - For trading / account / orders, use `finmeta-simulation-skill` instead (ETF trading not yet supported).

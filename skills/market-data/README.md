@@ -1,6 +1,14 @@
 # FinMeta Market Data
 
-Read-only market data (symbols / quotes / kline) for **A-Share**, **US Stock**, **HK Stock**, **Crypto**, **ETF (A-Share exchange-traded funds)**, **Convertible Bonds (可转债)**. Usage and API examples live in `SKILL.md`; this README documents market-specific coverage details.
+Read-only market data (symbols / quotes / kline) for **A-Share**, **US Stock**, **HK Stock**, **Crypto**, **ETF (A-Share exchange-traded funds)**, **Convertible Bonds (可转债)**, plus the **A-Share call-auction process feed**. Usage and API examples live in `SKILL.md`; this README documents market-specific coverage details.
+
+## A-Share call auction coverage (集合竞价过程)
+
+`GET /public/markets/ashare/auction` (ashare only) serves the per-second indicative points from the two call-auction sessions — **open 09:15–09:25** and **close 14:57–15:00**. The indicative match price/volume evolves as orders arrive and cancel; the feed is the raw material for bull/bear-trap (诱多/诱空) analysis.
+
+- Coverage starts **2026-09-01**, collected once daily after the close; platform keeps it permanently.
+- Fields and semantics (units, direction, `point_index`) are documented in `SKILL.md` → "A-Share Call Auction process".
+- The official match result (09:26 / 15:00) is not in this feed — it appears in quotes/kline.
 
 ## HK Stock coverage
 
