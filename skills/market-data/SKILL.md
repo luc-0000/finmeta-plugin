@@ -11,7 +11,9 @@ Read-only market data (symbols / quotes / kline) for **A-Share**, **US Stock**, 
 > ```bash
 > export FINMETA_ACCESS_TOKEN=$(python3 -c "import json,os;print(json.load(open(os.path.expanduser('~/.finmeta/config.json'))).get('access_token',''))")
 > ```
-> If the file doesn't exist or is empty, stop and ask the user to run `finmeta-plugin` setup skill first.
+> If the file doesn't exist or is empty, stop and give the user the setup steps: get a token
+> at https://fin-meta.net/profile → **Access Token**, save it into `~/.finmeta/config.json`
+> — full steps in the plugin root `SKILL.md` (**Setup** section).
 
 Base URL: `https://fin-meta.net/api/v1`. `{market}` = `ashare` | `usstock` | `hkstock` | `crypto` | `etf` | `cb`.
 

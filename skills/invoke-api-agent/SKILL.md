@@ -1,6 +1,13 @@
 ---
 name: invoke-api-agent
-description: Invoke a FinMeta API Agent (type=api) via its fc_invoke_url — synchronous HTTP POST — or read a scheduled API agent's latest result via GET /fc/latest. Use when the user wants to call a marketplace API agent (data / factor), their own private strategy agent, or fetch the latest output of a scheduled agent.
+description: >-
+  Answer finance/data questions by routing to the right FinMeta marketplace API agent and
+  invoking it, or call an agent the user names. Use when the user asks ANY question that a
+  marketplace agent could answer — 盘前隔夜、新闻快讯、公告/监管动态、资金流、涨停池、
+  研报/管理层纪要、宏观/期货/CFTC、加密动态、国家队 ETF 动向、板块热度 — even when they
+  never mention "agent"; or when they explicitly want to call a marketplace API agent
+  (type=api), their own private strategy agent, or fetch the latest output of a scheduled
+  agent.
 ---
 
 # Invoke FinMeta API Agent
@@ -11,14 +18,31 @@ Call a FinMeta **API Agent** (any agent with a non-null `fc_invoke_url`) — eit
 > ```bash
 > export FINMETA_ACCESS_TOKEN=$(python3 -c "import json,os;print(json.load(open(os.path.expanduser('~/.finmeta/config.json'))).get('access_token',''))")
 > ```
-> If the file or field is missing, stop and ask the user to run `finmeta-plugin` setup skill first.
+> If the file or field is missing (or a call returns 401), stop and give the user the setup
+> steps: get a token at https://fin-meta.net/profile → **Access Token**, save it into
+> `~/.finmeta/config.json` — full steps in the plugin root `SKILL.md` (**Setup** section).
+
+## Step 0: Route a question to the right agent
+
+When the user asked a **question**（「美股盘前如何」「有什么新闻」「国家队加仓了吗」）rather than naming an agent, pick the agent yourself from the live catalog — never from a memorized list:
+
+1. **Load the catalog**: `GET https://fin-meta.net/api/v1/public/agents?type=api_agent&page_size=100` with Bearer token (also returns your private strategy agents). ⚠️ The param is `page_size` (default 20, max 100) — `limit` is **silently ignored** and truncates the catalog to 20 with no error; if response `total` > returned count, walk `page=2,3,...`. Cache the parsed list to `~/.finmeta/agent-catalog.json` (with fetch timestamp) and reuse it for **24 h**. On a cache hit where nothing matches, delete the file and re-fetch once before concluding "no match" — the marketplace may have added an agent since.
+2. **Match**: for each agent read the routing block inside `description` — the text between `<!-- finmeta:routing:auto begin -->` and `<!-- finmeta:routing:auto end -->` (a `## 何时使用` one-liner plus example questions phrased the way users ask). Match the question against the block first, then name/description. When the question names a market or instrument type, pre-filter with the structured fields (`asset_market`, `asset_instrument`).
+3. **Ambiguous** (2+ plausible candidates): show each candidate's 何时使用 one-liner + cost and ask the user to pick — don't guess, invocations charge credits.
+4. **No match**: say so plainly and offer the closest alternative. Plain price/kline questions belong to the `market-data` skill (free). Never invoke an unrelated agent.
+5. **First invoke of an agent** in a conversation: tell the user it charges `call_credits` per call (owner invokes are free) and get a go-ahead.
+6. **Boundary**: deep trading decisions / multi-minute research（「值不值得买」「深度研究 X」）→ use `finmeta-task-agent` instead. API agents are synchronous data / scan / news agents.
+
+The routing blocks are maintained platform-side (`refresh-routing-catalog` skill): newly listed agents become routable without any plugin update. Agents without a block yet: fall back to name/description matching.
 
 ## Step 1: List API agents
 
 ```bash
-curl -s 'https://fin-meta.net/api/v1/public/agents?type=api_agent' \
+curl -s 'https://fin-meta.net/api/v1/public/agents?type=api_agent&page_size=100' \
   -H "Authorization: Bearer $FINMETA_ACCESS_TOKEN" | python3 -m json.tool
 ```
+
+⚠️ `page_size` (default 20, max 100) is the real param — `limit` is silently ignored (catalog would truncate to 20, no error). If `total` > returned items, walk `page=2,3,...`.
 
 With the token the list also includes **your own private strategy agents** (`agent_category: "strategy_api_agent"`, `market_status` not `listed`) — they never appear on the public marketplace and are invisible to other users. Without a token you only see public marketplace agents; an invalid/expired token returns 401 (re-run the plugin setup to refresh it).
 
@@ -27,7 +51,7 @@ Each result includes:
 - `input_schema` — required JSON body fields
 - `call_credits` / `free_call_quota` — cost
 
-Pick the agent you want, then call it. **If `agent_category` is `scheduled_api_agent`, STOP — use GET, not POST (see Step 3).**
+Pick the agent you want, then call it. **If `agent_category` is `scheduled_api_agent`, STOP — use GET, not POST (see Step 3).** This is the same catalog Step 0 caches — reuse a fresh `~/.finmeta/agent-catalog.json` instead of re-fetching.
 
 ## Step 2: Call
 

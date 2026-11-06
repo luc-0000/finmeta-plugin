@@ -32,6 +32,9 @@ from pathlib import Path
 API_BASE = os.environ.get("FINTOOLS_API_BASE", "https://fin-meta.net")
 API_PREFIX = "/api/v1"
 
+ROUTING_BEGIN = "<!-- finmeta:routing:auto begin -->"
+ROUTING_END = "<!-- finmeta:routing:auto end -->"
+
 
 def load_token():
     """Same precedence as the other plugin skills (simulation api.py):
@@ -55,8 +58,9 @@ def load_token():
 def api_request(method, path, body=None):
     token = load_token()
     if not token:
-        sys.exit("ERROR: no token. Set FINMETA_ACCESS_TOKEN or run finmeta-plugin setup "
-                 "(https://fin-meta.net/profile → Access Token).\n")
+        sys.exit("ERROR: no token. Set FINMETA_ACCESS_TOKEN, or get one at "
+                 "https://fin-meta.net/profile → Access Token and save it to "
+                 "~/.finmeta/config.json (see plugin root SKILL.md, Setup section).\n")
     url = f"{API_BASE}{API_PREFIX}{path}"
     cmd = ["curl", "-sS", "-X", method, url,
            "-H", f"Authorization: Bearer {token}",
@@ -73,8 +77,12 @@ def api_request(method, path, body=None):
 
 
 def list_task_agents():
-    data = api_request("GET", "/public/agents?limit=100")
+    # page_size 才是真实参数名（默认 20、上限 100）；`limit` 会被静默忽略 → 只回 20 条
+    data = api_request("GET", "/public/agents?page_size=100")
     items = data.get("items", data.get("agents", []))
+    total = data.get("total")
+    if total is not None and len(items) < total:
+        print(f"WARNING: catalog truncated ({len(items)}/{total}) — raise page_size or walk `page`")
     task_agents = [a for a in items if a.get("asset_type") == "agent"]
     api_agents = [a for a in items if a.get("asset_type") == "api"]
     print(f"Total: {len(items)} agents (Task: {len(task_agents)}, API: {len(api_agents)})\n")
@@ -89,8 +97,16 @@ def list_task_agents():
         if isinstance(schema, dict) and schema:
             fields = [f'{k}: {v.get("type","?")}{"*" if v.get("required") else ""}' for k, v in schema.items()]
             print(f"      args: {{{', '.join(fields)}}}")
-        if a.get("description"):
-            print(f"      {a['description'].splitlines()[0][:110]}")
+        desc = a.get("description") or ""
+        if desc:
+            if ROUTING_BEGIN in desc and ROUTING_END in desc:
+                # Routing block: surface the 何时使用 one-liner (what Step 0 matching reads).
+                block = desc.split(ROUTING_BEGIN)[1].split(ROUTING_END)[0]
+                when = next((l.strip() for l in block.splitlines()
+                             if l.strip() and not l.strip().startswith("#")), "")
+                print(f"      何时使用: {when[:100]}")
+            else:
+                print(f"      {desc.splitlines()[0][:110]}")
         # Show latest eval result if available
         tr = a.get("test_results")
         if tr and tr.get("eval_tests"):

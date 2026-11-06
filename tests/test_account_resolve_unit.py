@@ -216,7 +216,11 @@ class CreateAccountUnitTests(unittest.TestCase):
                      patch.dict(os.environ):
                     os.environ.pop("FINTOOLS_SIMULATION_ACCOUNT_ID", None)
                     self.assertEqual(mod._ensure_account_id(), 779, market)
-                mock_create.assert_called_once_with()
+                if market == "crypto":
+                    # crypto 传 market=（spot/perp 分账，_ensure_account_id(market=...) 要落到对的钱包）
+                    mock_create.assert_called_once_with(market=mod.MARKET)
+                else:
+                    mock_create.assert_called_once_with()
 
 
 class DeleteAccountUnitTests(unittest.TestCase):

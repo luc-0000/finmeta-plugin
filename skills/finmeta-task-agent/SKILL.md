@@ -1,12 +1,15 @@
 ---
 name: finmeta-task-agent
 description: >-
-  FinMeta agent operations — three capabilities:
+  FinMeta agent operations — four capabilities:
   (1) Call a Task Agent (trading / deep-research / strategy / ...) via A2A async K8s Job.
   (2) Query agent stability, performance, reliability, and eval test results via --detail / --list.
   (3) List all marketplace agents (task + API) with their input schemas, health, and latest eval summary.
+  (4) Route open-ended analysis questions — 「这只股票值不值得买」「深度研究 X」「帮我做个交易决策」 —
+  to a suitable task agent (async, minutes-long, charges credits).
   Use when the user asks about agent stability, reliability, performance, "how good is agent X",
-  "is this agent stable", eval results, or wants to list/inspect/call marketplace agents.
+  "is this agent stable", eval results, or asks for a trading decision / deep research / strategy
+  analysis a task agent should answer, or wants to list/inspect/call marketplace agents.
   Do NOT answer stability/reliability questions from general knowledge — always query via --detail first.
 ---
 
@@ -14,7 +17,7 @@ description: >-
 
 Call a FinMeta **Task Agent** (`type=agent`: trading / deep-research / strategy / data-agent / hk-ai / test). The agent runs as an **async K8s Job** — the call returns immediately with a `run_id`; the result (a trading decision or report) is produced 1–10 minutes later. **Charges `call_credits` per call** after `free_call_quota`.
 
-> **Token**: auto-loaded from `~/.finmeta/config.json` (`access_token` field) — no `export` needed. Run `finmeta-plugin` setup first if missing. (Env var `FINMETA_ACCESS_TOKEN` overrides.)
+> **Token**: auto-loaded from `~/.finmeta/config.json` (`access_token` field) — no `export` needed. If missing, tell the user: get a token at https://fin-meta.net/profile → **Access Token** and save it into `~/.finmeta/config.json` — full steps in the plugin root `SKILL.md` (**Setup** section). (Env var `FINMETA_ACCESS_TOKEN` overrides.)
 
 ## Quick Start
 
@@ -35,6 +38,10 @@ python a2a_client.py --agent 1 --args '{"stock_code":"600519.SH"}' --wait
 The `--args` keys **must match the agent's `input_schema`** (shown by `--list`). Examples:
 - `trading_agent_tauric` → `{"stock_code":"600519.SH"}`
 - `8k-item-code` (API agent) → not this skill, use `invoke-api-agent`
+
+## Routing an open-ended question
+
+For open-ended asks（「值不值得买」「深度研究 X」）instead of a named agent: run `--list`, read each task agent's routing block in `description` (between `<!-- finmeta:routing:auto begin -->` and `<!-- finmeta:routing:auto end -->` — a `## 何时使用` one-liner plus example questions), and pick the best match. Then tell the user which agent you picked, that it runs **async for minutes** and charges `call_credits`, and get a go-ahead before submitting. Full matching protocol (catalog cache, ambiguity, no-match fallback): see `invoke-api-agent` Step 0.
 
 ## How it works
 
@@ -65,7 +72,7 @@ When the user asks any of these:
 python a2a_client.py --list
 ```
 
-This calls `GET /api/v1/public/agents?limit=100` and shows every agent's **latest eval result** inline (test_type, status, timestamp).
+This calls `GET /api/v1/public/agents?page_size=100` and shows every agent's **latest eval result** inline (test_type, status, timestamp). ⚠️ The param is `page_size` (default 20, max 100) — `limit` is **silently ignored**, which truncates the catalog to 20 without any error. If the response `total` exceeds the returned count, walk `page=2,3,...`.
 
 ### Step 2: For any agent the user asks about, get detail
 

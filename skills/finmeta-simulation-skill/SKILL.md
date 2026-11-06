@@ -37,7 +37,9 @@ python hkstock/api.py --action buy --symbol 00700.HK --quantity 10
 ## Setup
 
 > **Token**: auto-loaded from `~/.finmeta/config.json` by `api.py` — no export needed.
-> If the file doesn't exist, stop and ask the user to run `finmeta-plugin` setup skill first.
+> If the file doesn't exist, stop and give the user the setup steps: get a token at
+> https://fin-meta.net/profile → **Access Token**, save it into `~/.finmeta/config.json`
+> — full steps in the plugin root `SKILL.md` (**Setup** section).
 
 ```bash
 # Optional — pin a specific account (writes accounts.<market> to ~/.finmeta/config.json)
@@ -269,7 +271,9 @@ Symbol format per market: A-Share `600519.SH` / `000858.SZ`, US `AAPL`, HK `0070
 
 ### First Run — Token & Account Setup
 
-1. Token: load from `~/.finmeta/config.json` (`access_token`). If missing, invoke `finmeta-plugin` setup skill.
+1. Token: load from `~/.finmeta/config.json` (`access_token`). If missing, tell the user to
+   get one at https://fin-meta.net/profile → **Access Token** and save it into the file
+   (full steps: plugin root `SKILL.md`, **Setup** section).
 2. account_id: nothing to do — every market auto-resolves your personal account
    (ownership-checks any id saved in config, auto-creates an account when you trade with none).
    User has no account and wants one? `python <market>/api.py --action create_account`
