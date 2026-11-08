@@ -122,6 +122,23 @@ curl -H "Authorization: Bearer $FINMETA_ACCESS_TOKEN" \
   "https://fin-meta.net/api/v1/public/markets/cb/kline?symbol=110081.SH&period=5m&limit=30"
 ```
 
+## A-Share Daily Slice (whole market, one day = one call, ashare only)
+
+Every stock's single daily bar for one trading day — ~5,500 rows in one bare-array response, no pagination (includes BSE 北交所； ETF / convertible bonds not included — use their kline endpoints).
+
+```bash
+# The whole market on 2026-11-06
+curl -H "Authorization: Bearer $FINMETA_ACCESS_TOKEN" \
+  "https://fin-meta.net/api/v1/public/markets/ashare/daily?date=2026-11-06"
+```
+
+Fields: `symbol` / `open` / `high` / `low` / `close` (raw, unadjusted 元) / `volume` (股) / `pre_close` — **ex-right adjusted previous close** (除权后昨收基准价， exchange official; `null` when source is missing, passed through as-is).
+
+`pre_close` is the adjustment raw material: `ratio = previous day's close ÷ pre_close`; ratio ≠ 1 ⟺ ex-dividend/ex-right day. Multiply ratios day by day (anchor at the window's first bar) to build the full adjustment chain — both 前复权 (forward) and 后复权 (backward) are derivable from raw OHLC + pre_close; no separate `adj_factor` needed.
+
+- One call = one full market day — bootstrap local history with ~130 calls (coverage from 2024-11-06), then append one per day.
+- Daily bars land ~**15:35 CST** each trading day; non-trading / un-landed / out-of-coverage days return **404**.
+
 ## A-Share Call Auction process (集合竞价过程, ashare only)
 
 Per-second indicative points from the two A-Share call-auction sessions: **open auction 09:15–09:25** and **close auction 14:57–15:00**. During these windows the exchange publishes an indicative match price/volume that evolves as orders arrive and cancel — the raw material for bull/bear-trap (诱多/诱空) analysis.
@@ -154,6 +171,7 @@ Response: list of points, ascending in time; `point_index` is a continuous ordin
 ## Notes
 
 - A-Share symbols returns the full active list; use `keyword` to filter. HK Stock symbols covers 142 competition symbols only — see `README.md`.
+- A-Share **daily slice** (`/public/markets/ashare/daily?date=`): whole-market one-day snapshot for backtests/screeners — raw OHLC + volume + `pre_close` (ex-right adjusted previous close, the adjustment-chain raw material); ~5,500 stocks incl. BSE, one bare-array response, daily bars land ~15:35 CST, coverage from 2024-11-06.
 - A-Share kline: `1m`/`5m`/`1h` derive from the 1-minute snapshot table (coverage starts 2026-08-29, ~30 days retention; earlier ranges return empty); `1d` reads the permanent daily table — **~2 years of history** (backfilled to 2024-11-06), one bar per trading day, volume in 股, and the latest day is live-filled from snapshots until it lands in the table (~15:35). Per-minute volume/amount are exact; high/low are exact only when the minute sets a new day extreme, otherwise bounded by that minute's open/close.
 - ETF kline: identical snapshot semantics to A-Share (above, including the two-year `1d` daily table); ETF symbols list covers ~1674 funds, updates every minute during CN trading hours; intraday coverage starts 2026-09-22 with ~30 days retention.
 - Convertible Bond (cb) kline: identical snapshot semantics to A-Share (above, including the two-year `1d` daily table); covers ~320 SH/SZ convertible bonds (SH `11xxxx` / SZ `12xxxx`, e.g. `110081.SH`), updates every minute during CN trading hours; intraday coverage starts 2026-10-14 with ~30 days retention. `volume` unit is 张 (bonds, face value 100 CNY each), same unit for `1d`; real-world CBs trade T+0 with ±20% limits, but market data here is read-only (no simulation trading yet).
