@@ -32,9 +32,6 @@ from pathlib import Path
 API_BASE = os.environ.get("FINTOOLS_API_BASE", "https://fin-meta.net")
 API_PREFIX = "/api/v1"
 
-ROUTING_BEGIN = "<!-- finmeta:routing:auto begin -->"
-ROUTING_END = "<!-- finmeta:routing:auto end -->"
-
 
 def load_token():
     """Same precedence as the other plugin skills (simulation api.py):
@@ -99,14 +96,7 @@ def list_task_agents():
             print(f"      args: {{{', '.join(fields)}}}")
         desc = a.get("description") or ""
         if desc:
-            if ROUTING_BEGIN in desc and ROUTING_END in desc:
-                # Routing block: surface the 何时使用 one-liner (what Step 0 matching reads).
-                block = desc.split(ROUTING_BEGIN)[1].split(ROUTING_END)[0]
-                when = next((l.strip() for l in block.splitlines()
-                             if l.strip() and not l.strip().startswith("#")), "")
-                print(f"      何时使用: {when[:100]}")
-            else:
-                print(f"      {desc.splitlines()[0][:110]}")
+            print(f"      {desc.splitlines()[0][:110]}")
         # Show latest eval result if available
         tr = a.get("test_results")
         if tr and tr.get("eval_tests"):

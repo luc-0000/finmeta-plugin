@@ -27,13 +27,13 @@ Call a FinMeta **API Agent** (any agent with a non-null `fc_invoke_url`) — eit
 When the user asked a **question**（「美股盘前如何」「有什么新闻」「国家队加仓了吗」）rather than naming an agent, pick the agent yourself from the live catalog — never from a memorized list:
 
 1. **Load the catalog**: `GET https://fin-meta.net/api/v1/public/agents?type=api_agent&page_size=100` with Bearer token (also returns your private strategy agents). ⚠️ The param is `page_size` (default 20, max 100) — `limit` is **silently ignored** and truncates the catalog to 20 with no error; if response `total` > returned count, walk `page=2,3,...`. Cache the parsed list to `~/.finmeta/agent-catalog.json` (with fetch timestamp) and reuse it for **24 h**. On a cache hit where nothing matches, delete the file and re-fetch once before concluding "no match" — the marketplace may have added an agent since.
-2. **Match**: for each agent read the routing block inside `description` — the text between `<!-- finmeta:routing:auto begin -->` and `<!-- finmeta:routing:auto end -->` (a `## 何时使用` one-liner plus example questions phrased the way users ask). Match the question against the block first, then name/description. When the question names a market or instrument type, pre-filter with the structured fields (`asset_market`, `asset_instrument`).
-3. **Ambiguous** (2+ plausible candidates): show each candidate's 何时使用 one-liner + cost and ask the user to pick — don't guess, invocations charge credits.
+2. **Match**: read each agent's `name` and `description` and pick the best **semantic** match for the question — you are the router; descriptions are owner-written summaries of what each agent does and when to use it. When the question names a market or instrument type, pre-filter with the structured fields (`asset_market`, `asset_instrument`).
+3. **Ambiguous** (2+ plausible candidates): show each candidate's name + one-line description + cost and ask the user to pick — don't guess, invocations charge credits.
 4. **No match**: say so plainly and offer the closest alternative. Plain price/kline questions belong to the `market-data` skill (free). Never invoke an unrelated agent.
 5. **First invoke of an agent** in a conversation: tell the user it charges `call_credits` per call (owner invokes are free) and get a go-ahead.
 6. **Boundary**: deep trading decisions / multi-minute research（「值不值得买」「深度研究 X」）→ use `finmeta-task-agent` instead. API agents are synchronous data / scan / news agents.
 
-The routing blocks are maintained platform-side (`refresh-routing-catalog` skill): newly listed agents become routable without any plugin update. Agents without a block yet: fall back to name/description matching.
+The live catalog is the single source of routing truth: newly listed agents become routable without any plugin update.
 
 ## Step 1: List API agents
 

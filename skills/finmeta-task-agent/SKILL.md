@@ -41,7 +41,7 @@ The `--args` keys **must match the agent's `input_schema`** (shown by `--list`).
 
 ## Routing an open-ended question
 
-For open-ended asks（「值不值得买」「深度研究 X」）instead of a named agent: run `--list`, read each task agent's routing block in `description` (between `<!-- finmeta:routing:auto begin -->` and `<!-- finmeta:routing:auto end -->` — a `## 何时使用` one-liner plus example questions), and pick the best match. Then tell the user which agent you picked, that it runs **async for minutes** and charges `call_credits`, and get a go-ahead before submitting. Full matching protocol (catalog cache, ambiguity, no-match fallback): see `invoke-api-agent` Step 0.
+For open-ended asks（「值不值得买」「深度研究 X」）instead of a named agent: run `--list`, read each task agent's `name` and `description`, and pick the best semantic match. Then tell the user which agent you picked, that it runs **async for minutes** and charges `call_credits`, and get a go-ahead before submitting. Full matching protocol (catalog cache, ambiguity, no-match fallback): see `invoke-api-agent` Step 0.
 
 ## How it works
 
