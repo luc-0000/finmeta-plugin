@@ -84,9 +84,9 @@ curl -H "Authorization: Bearer $FINMETA_ACCESS_TOKEN" \
 `period`: A-Share `1m|5m|1h|1d`, US Stock `5m|1h|1d`, HK Stock `1m|5m|1h|1d`, Crypto `1m|5m|1h|1d`, ETF `1m|5m|1h|1d`, Convertible Bonds `1m|5m|1h|1d`. `limit`: 1–500 (default 100).
 
 > **US Stock**: native bar is 5m; `1h` and `1d` are server-aggregated from 5m. Use `period=1d` for daily candles — do NOT pull 5m and aggregate client-side.
-> **A-Share**: native data is 1-minute snapshots; `5m`/`1h`/`1d` are server-aggregated from 1m snapshots (~30 days of history). Use `period=1d` for daily candles.
-> **ETF**: same as A-Share — native 1-minute snapshots, larger periods server-aggregated, ~30 days of history (coverage starts 2026-09-22).
-> **Convertible Bonds**: same as A-Share — native 1-minute snapshots, larger periods server-aggregated, ~30 days of history (coverage starts 2026-10-14).
+> **A-Share**: `1m` native snapshots; `5m`/`1h` server-aggregated from 1m (~30 days of history); `1d` reads the permanent daily table — **~2 years of history** (backfilled from 2024-11-06). Use `period=1d` for daily candles.
+> **ETF**: same as A-Share — intraday from 1-minute snapshots (~30 days, coverage starts 2026-09-22); `1d` reads the daily table, ~2 years (from 2024-11-06).
+> **Convertible Bonds**: same as A-Share — intraday from 1-minute snapshots (~30 days, coverage starts 2026-10-14); `1d` reads the daily table, ~2 years (from 2024-11-06).
 
 ```bash
 # Crypto — BTC 1-hour candles, last 50
@@ -97,9 +97,9 @@ curl -H "Authorization: Bearer $FINMETA_ACCESS_TOKEN" \
 curl -H "Authorization: Bearer $FINMETA_ACCESS_TOKEN" \
   "https://fin-meta.net/api/v1/public/markets/ashare/kline?symbol=600519.SH&period=1m&limit=30"
 
-# A-Share — Moutai daily, last 30
+# A-Share — Moutai daily, last 500 (≈ 2 full years)
 curl -H "Authorization: Bearer $FINMETA_ACCESS_TOKEN" \
-  "https://fin-meta.net/api/v1/public/markets/ashare/kline?symbol=600519.SH&period=1d&limit=30"
+  "https://fin-meta.net/api/v1/public/markets/ashare/kline?symbol=600519.SH&period=1d&limit=500"
 
 # US Stock — Apple daily candles, last 5 trading days
 curl -H "Authorization: Bearer $FINMETA_ACCESS_TOKEN" \
@@ -154,9 +154,9 @@ Response: list of points, ascending in time; `point_index` is a continuous ordin
 ## Notes
 
 - A-Share symbols returns the full active list; use `keyword` to filter. HK Stock symbols covers 142 competition symbols only — see `README.md`.
-- A-Share kline: the 1-minute snapshot table is the **sole source** — `1m` derives per-minute bars from snapshots, `5m`/`1h` are bucketed from 1m, `1d` is day-level (open = first snapshot's open; volume/amount = final cumulative). Coverage starts 2026-08-29 with ~30 days retention; earlier ranges return empty. Per-minute volume/amount are exact; high/low are exact only when the minute sets a new day extreme, otherwise bounded by that minute's open/close.
-- ETF kline: identical snapshot semantics to A-Share (above); ETF symbols list covers ~1674 funds, updates every minute during CN trading hours, coverage starts 2026-09-22 with ~30 days retention.
-- Convertible Bond (cb) kline: identical snapshot semantics to A-Share (above); covers ~320 SH/SZ convertible bonds (SH `11xxxx` / SZ `12xxxx`, e.g. `110081.SH`), updates every minute during CN trading hours, coverage starts 2026-10-14 with ~30 days retention. `volume` unit is 张 (bonds, face value 100 CNY each); real-world CBs trade T+0 with ±20% limits, but market data here is read-only (no simulation trading yet).
+- A-Share kline: `1m`/`5m`/`1h` derive from the 1-minute snapshot table (coverage starts 2026-08-29, ~30 days retention; earlier ranges return empty); `1d` reads the permanent daily table — **~2 years of history** (backfilled to 2024-11-06), one bar per trading day, volume in 股, and the latest day is live-filled from snapshots until it lands in the table (~15:35). Per-minute volume/amount are exact; high/low are exact only when the minute sets a new day extreme, otherwise bounded by that minute's open/close.
+- ETF kline: identical snapshot semantics to A-Share (above, including the two-year `1d` daily table); ETF symbols list covers ~1674 funds, updates every minute during CN trading hours; intraday coverage starts 2026-09-22 with ~30 days retention.
+- Convertible Bond (cb) kline: identical snapshot semantics to A-Share (above, including the two-year `1d` daily table); covers ~320 SH/SZ convertible bonds (SH `11xxxx` / SZ `12xxxx`, e.g. `110081.SH`), updates every minute during CN trading hours; intraday coverage starts 2026-10-14 with ~30 days retention. `volume` unit is 张 (bonds, face value 100 CNY each), same unit for `1d`; real-world CBs trade T+0 with ±20% limits, but market data here is read-only (no simulation trading yet).
 - Crypto kline data is 1-minute native; larger periods are server-aggregated. The kline endpoint works for both spot (`BTC/USDT`) and perp (`BTC/USDT:USDT`) symbols; rolling ~60 days of 1m history.
 - Crypto perp symbols (`?type=perp`) are tradable in the simulation via the `finmeta-simulation-skill` Crypto Perp section (`contract_open` / `contract_close`).
 - HK Stock kline updates every 5 minutes during HK trading hours (09:30–16:00 HKT); `1m` is native, `5m`/`1h`/`1d` are server-aggregated from 1m.
